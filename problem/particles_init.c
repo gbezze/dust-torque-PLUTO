@@ -22,8 +22,8 @@ double dust_radial_exp(double size){
   //empyrical power law exponent for stationary dust distribution
   //size in cm
 
-  double x=size/2.38;
-  double exponent = 2.387*log10(pow(x,1.041)+pow(x,-0.117));
+  double x=size/3.369;
+  double exponent = 2.246*log10(pow(x,1.000)+pow(x,-0.124));
   //printf("size: %e, exponent %e", size, exponent);
   return exponent;
 }

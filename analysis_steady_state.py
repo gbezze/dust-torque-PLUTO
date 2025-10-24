@@ -276,8 +276,8 @@ def dust_radial_exponent(x,x0,a,b,n):
 def dust_radial_exponent_p(x):
     #fitted model
 
-    u=x/1.99
-    return 1.162*np.log10(u**1.012+u**-0.258)
+    u=x/3.369
+    return 2.246*np.log10(u**1.000+u**-0.124)
 
 popt, pcov = curve_fit(dust_radial_exponent,bin_sizes,exps,[2,-0.27,2.4,0.4],errs)
 
@@ -289,6 +289,7 @@ print(" s0 =  "+str(popt[0]))
 print(" a  = "+str(popt[1]*popt[3]))
 print(" b  =  "+str(popt[2]*popt[3]))
 
+#old version: s0=1.99 K=1.162 a=1.012 b=-0.258
 
 #%%
 
