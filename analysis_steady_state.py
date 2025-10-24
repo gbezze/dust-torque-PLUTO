@@ -10,7 +10,7 @@ import os
 
 global output_dir
 
-output_dir = r'./out_stationary/'
+output_dir = r'./problem/out_stationary/'
 
 def ReadPartData(ns):
 
@@ -295,7 +295,7 @@ print(" b  =  "+str(popt[2]*popt[3]))
 plt.figure()
 plt.errorbar(bin_sizes, exps, yerr=errs, color='darkgreen',fmt='o', alpha=0.5,label='simulation ($\pm$ 1 std)')
 plt.plot(bin_sizes,dust_radial_exponent(bin_sizes,*popt),linewidth=3., label='$q\ (s)$ fit')
-plt.plot(bin_sizes,dust_radial_exponent_p(bin_sizes),linewidth=3., label='$q\ (s)$ fit')
+#plt.plot(bin_sizes,dust_radial_exponent_p(bin_sizes),linewidth=3., label='$q\ (s)$ fit')
 
 plt.xscale('log')
 plt.xlabel("dust size $s$ [cm]")
@@ -308,10 +308,10 @@ plt.grid(which='both')
 
 plt.figure()
 for i in range(N_bins):
-    plt.plot(time,counts[:,i],label=str(bin_sizes[i]),c=plt.cm.viridis(i/N_bins))
-plt.xlabel('Time')
-plt.legend(loc='center left',bbox_to_anchor=(1, 0.5))
+    plt.plot(time,counts[:,i],label=str(bin_sizes[i]),c=plt.cm.rainbow(i/N_bins),alpha=0.3)
+plt.xlabel('Time [years]')
 plt.ylabel('Nuber of particles in domain')
+plt.grid()
 
 plt.figure()
 

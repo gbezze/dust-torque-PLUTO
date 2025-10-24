@@ -13,7 +13,7 @@ import os
 
 global output_dir
 
-output_dir = r'./out/'
+output_dir = r'.problem/out/'
 
 def nice_plots(
     font_dir: str = r"/home/bezze/ebgaramond",

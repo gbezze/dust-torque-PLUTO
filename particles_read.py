@@ -16,7 +16,7 @@ def NStepStr(ns):
 def ReadPartData(ns):
 
     nstepstr = NStepStr(ns)
-    fname = "out/particles."+nstepstr+".partdbl"
+    fname = r"./problem/out/particles."+nstepstr+".partdbl"
     h_lines = 0 
     val_dict = {}
 
