@@ -13,14 +13,14 @@ import os
 
 global output_dir
 
-output_dir = r'.problem/out/'
+output_dir = r'./problem/out/'
 
-def nice_plots(
-    font_dir: str = r"/home/bezze/ebgaramond",
-    palette: list[str] = None,
-    font_size: int = 14,
-    use_math: bool = True,
-    ):
+def nice_plots():
+    font_dir = r"/home/bezze/ebgaramond"
+    palette = None
+    font_size = 14
+    use_math = True
+
     """
     Configure Matplotlib to use EB Garamond with an optional custom color palette and math setup.
 
@@ -63,7 +63,7 @@ def nice_plots(
             "mathtext.bf": "EB Garamond:bold",
         })
 
-    print("✅ EB Garamond style configured for Matplotlib.")
+    print("EB Garamond configured")
 
 def positions(step):
 
@@ -150,33 +150,6 @@ def smoothing_length(r_planet):
 
     return d_smooth
 
-def calculate_x_force(step):
-
-    x_part, y_part, size_part, time, r_planet, angle_planet, t_planet =dust_positions(step)
-
-    x_planet = r_planet * np.sin(angle_planet)
-    y_planet = r_planet * np.cos(angle_planet)
-
-    x_part_rel = x_part - x_planet
-    y_part_rel = y_part - y_planet
-
-    d_smooth2 = smoothing_length(r_planet)**2
-
-    d2 = x_part_rel**2 +y_part_rel**2 + d_smooth2
-    force_x_part = x_part_rel / d2**1.5
-
-    sizes = np.sort(np.unique(size_part))
-
-    force_size = np.zeros(len(sizes))
-
-    #for each size bin sum the force
-
-    for i, size in enumerate(sizes):
-        size_mask = size_part == size
-        force_size[i] = np.sum(force_x_part[size_mask])
-        
-    return sizes, force_size, time, r_planet
-
 def read_force():
     
     force_data_path = os.path.join(output_dir, 'dust_force.dat')
@@ -201,7 +174,6 @@ def read_force():
 
     return time, force, counts, N_bins, bins
 
-def mov_stats(X, window_size):
 
     half = window_size // 2
     X_avg = np.zeros_like(X, dtype=float)
@@ -237,6 +209,22 @@ def plot_dist_gaussian(data):
     plt.ylabel("Distribution density")
     plt.title("Force distribution")
     plt.show("")
+    
+    print(f"Average: {avg:.3e} +/- {3*err:.3e}")
+    print(f"STD: {sigma:.3e}")
+
+
+    return avg, sigma, err
+
+def fit_gaussian(data):
+
+    # Fit a normal distribution to the data
+    avg, sigma = norm.fit(data)
+    # Generate the Gaussian curve
+    x = np.linspace(bins[0], bins[-1], 100)
+    pdf = norm.pdf(x, avg, sigma)
+
+    err = sigma/np.sqrt(len(data))
 
     return avg, sigma, err
 
@@ -286,84 +274,35 @@ def radial_distribution(S,step_start,step_end, plotting=True):
     
     return exponent, exp_err
 
-#%%
-
-dust_hist(step=[0,9],S=2)
-
-#%%
-size=1
-t_stat = 0
-
-nice_plots()
-
-time, force, counts, N_bins, bin_sizes = read_force()
-
-#dust slope calculation
-
-exps = np.zeros(N_bins)
-errs = np.zeros(N_bins)
-
-for i in range(N_bins-1):
-    exps[i], errs[i] = radial_distribution(i,1,9,plotting=True)
-
-def dust_radial_exponent(x,x0,a,b,n):
-    #for model fitting
-    
-    u=x/x0
-    s1=u**(a*n)
-    s2=u**(b*n)
-
-    exponent= np.log10(s1+s2)/n
-
-    return exponent
-
 def dust_radial_exponent_p(x):
     #fitted model
 
-    u=x/1.99
-    return 1.162*np.log10(u**1.012+u**-0.258)
-
-popt, pcov = curve_fit(dust_radial_exponent,bin_sizes,exps,[2,-0.3,1.2,0.86],errs)
-
-print(popt)
-print(np.linalg.cond(pcov))
+    u=x/3.369
+    return 2.246*np.log10(u**1.000+u**-0.124)
 
 #%%
-plt.figure()
-plt.errorbar(bin_sizes, exps, yerr=errs, color='darkgreen',fmt='o', alpha=0.5,label='simulation ($\pm$ 1 std)')
-plt.plot(bin_sizes,dust_radial_exponent_p(bin_sizes),linewidth=3., label='$q\ (s)$ fit')
 
-plt.xscale('log')
-plt.xlabel("dust size $s$ [cm]")
-plt.ylabel(r"radial distribution exponent  $\frac{d \ \log N_p}{d \ \log r}$")
-plt.legend(loc='upper center',fancybox=False,framealpha=1.)
-plt.title('Steady state dust exponent')
-plt.grid(which='both')
+#dust_hist(step=[0,9,19],S=9)
 
-# %% torque calculation
+t_stat = 100
+size_bin=10
 
-#time, force, counts, N_bins, bins = read_force()
+time, force, counts, N_bins, bins = read_force()
 
-# avg_force = np.mean(force[time>t_stat,size])
+avg_counts = np.mean(counts[time>t_stat,:],axis=0)
 
-# avg_counts = np.mean(counts[time>t_stat,:],axis=0)
+plot_dist_gaussian(force[time>t_stat,size_bin])
 
-# avg_force, sigma_force, err = plot_dist_gaussian(force[time>t_stat,size])
+avg_force=np.zeros(N_bins)
+sigma_force=np.zeros(N_bins)
+err_force=np.zeros(N_bins)
 
-# plt.show()
-# print(f"Average force: {avg_force:.3e} +/- {3*err:.3e}")
-# print(f"Force std: {sigma_force:.3e}")
 
-# %% particle counts
-
-plt.figure()
 for i in range(N_bins):
-    plt.plot(time,counts[:,i],label=str(bin_sizes[i]),c=plt.cm.viridis(i/N_bins))
-plt.xlabel('Time')
-plt.legend(loc='center left',bbox_to_anchor=(1, 0.5))
-plt.ylabel('Nuber of particles in domain')
+    avg_force[i], sigma_force[i], err_force[i] = fit_gaussian(force[time>t_stat,i])
 
 plt.figure()
-plt.semilogx(bin_sizes,avg_counts,'o-')
+plt.errorbar(bins, avg_force, yerr=3*err_force, color='darkgreen',fmt='o')
+plt.xscale('log')
 
 # %%

@@ -17,6 +17,20 @@
 /* ///////////////////////////////////////////////////////////////////// */
 #include "pluto.h"
 
+double integrate(double (*func)(double), double a, double b) {
+  int n = 1e3;
+  double h = (b - a) / n;     // step size
+  double sum = 0.5 * (func(a) + func(b));
+
+  for (int i = 1; i < n; i++) {
+      double x = a + i * h;
+      sum += func(x);
+  }
+
+  return sum * h;
+}
+
+
 double dust_radial_exp(double size){
 
   //empyrical power law exponent for stationary dust distribution
@@ -28,6 +42,23 @@ double dust_radial_exp(double size){
   return exponent;
 }
 
+double dust_radial_distribution(double size, double ri, double ro, double rb, double r){
+
+  double pdf=0;
+
+  double q=dust_radial_exp(size);
+
+  if (r<rb){
+    pdf=pow(r/rb,q);
+  }
+  else{
+      //injection zone distribution (0 at r_end and 1 at r_damping)
+      pdf = pow(r/rb,-1*q) * (log10(r/ro)/log10(rb/ro));
+  }
+
+  return pdf;
+
+}
 
 double generate_random_radius(double size, double ri, double ro, double rb){
 
@@ -43,16 +74,7 @@ double generate_random_radius(double size, double ri, double ro, double rb){
     r = ri+(rand()/(1.+RAND_MAX))*(ro-ri);
     X = (rand()/(1.+RAND_MAX)); //dust density normalized at 1 for r=rb
 
-    q = dust_radial_exp(size);
-
-    //stationary dust radial density 
-    if (r<rb){
-      pdf=pow(r/rb,q);
-    }
-    else{
-        //injection zone distribution (0 at r_end and 1 at r_damping)
-        pdf = pow(r/rb,-1*q) * (log10(r/ro)/log10(rb/ro));
-    }
+    pdf=dust_radial_distribution(size, ri, ro, rb, r);
     
     //injection zone distribution linear cutoff (0 at r_end and 1 at r_damping)
     // double K = 1.;

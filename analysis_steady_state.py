@@ -260,7 +260,7 @@ time, force, counts, N_bins, bin_sizes = read_force()
 exps = np.zeros(N_bins)
 errs = np.zeros(N_bins)
 for i in range(N_bins):
-    exps[i], errs[i] = radial_distribution(i,20,30,plotting=False)
+    exps[i], errs[i] = radial_distribution(i,17,30,plotting=False)
 
 def dust_radial_exponent(x,x0,a,b,n):
     #for model fitting
@@ -291,7 +291,7 @@ print(" b  =  "+str(popt[2]*popt[3]))
 
 #old version: s0=1.99 K=1.162 a=1.012 b=-0.258
 
-#%%
+# %%
 
 plt.figure()
 plt.errorbar(bin_sizes, exps, yerr=errs, color='darkgreen',fmt='o', alpha=0.5,label='simulation ($\pm$ 1 std)')

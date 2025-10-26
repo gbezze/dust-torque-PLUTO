@@ -1,11 +1,6 @@
 0 0.000000e+00 1.000000e-05 0 single_file little id x1 x2 x3 vx1 vx2 vx3 tau_s radius density composition tinj 
-1 4.999947e+01 6.207803e-04 80576 single_file little id x1 x2 x3 vx1 vx2 vx3 tau_s radius density composition tinj 
-2 9.999961e+01 6.207803e-04 161120 single_file little id x1 x2 x3 vx1 vx2 vx3 tau_s radius density composition tinj 
-3 1.499997e+02 6.207803e-04 241664 single_file little id x1 x2 x3 vx1 vx2 vx3 tau_s radius density composition tinj 
-4 1.999999e+02 6.207803e-04 322208 single_file little id x1 x2 x3 vx1 vx2 vx3 tau_s radius density composition tinj 
-5 2.500000e+02 6.207803e-04 402752 single_file little id x1 x2 x3 vx1 vx2 vx3 tau_s radius density composition tinj 
-6 2.999995e+02 6.207803e-04 483295 single_file little id x1 x2 x3 vx1 vx2 vx3 tau_s radius density composition tinj 
-7 3.499996e+02 6.207803e-04 563839 single_file little id x1 x2 x3 vx1 vx2 vx3 tau_s radius density composition tinj 
-8 3.999998e+02 6.207803e-04 644383 single_file little id x1 x2 x3 vx1 vx2 vx3 tau_s radius density composition tinj 
-9 4.499999e+02 6.207803e-04 724927 single_file little id x1 x2 x3 vx1 vx2 vx3 tau_s radius density composition tinj 
-10 5.000000e+02 6.207802e-04 805471 single_file little id x1 x2 x3 vx1 vx2 vx3 tau_s radius density composition tinj 
+1 1.999998e+02 3.394386e-04 589231 single_file little id x1 x2 x3 vx1 vx2 vx3 tau_s radius density composition tinj 
+2 3.999997e+02 3.394386e-04 1178439 single_file little id x1 x2 x3 vx1 vx2 vx3 tau_s radius density composition tinj 
+3 5.999999e+02 3.394386e-04 1767648 single_file little id x1 x2 x3 vx1 vx2 vx3 tau_s radius density composition tinj 
+4 7.999999e+02 3.394386e-04 2356856 single_file little id x1 x2 x3 vx1 vx2 vx3 tau_s radius density composition tinj 
+5 1.000000e+03 2.433559e-04 2946065 single_file little id x1 x2 x3 vx1 vx2 vx3 tau_s radius density composition tinj 
