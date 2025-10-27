@@ -155,7 +155,7 @@ void Analysis (const Data *d, Grid *grid)
       //one bin at a time (with rounding errors)
       size_cond = ( fabs(r_part-dust_size_array[bin]) < 1e-8 * fmax(fabs(r_part),(dust_size_array[bin])) ); 
       
-      //only outisde injection zone (no artificial density evolution)
+      //only outisde injection zone (no particle source)
       radius_cond = (part->coord[IDIR]<r_cutoff); 
 
       if (size_cond && radius_cond) 
@@ -172,9 +172,8 @@ void Analysis (const Data *d, Grid *grid)
         dy=r_part*sin(phi_part-phi_planet);
 
         //y force calculation
-
-        dr2=dx*dx+dy*dy+ds2;
-        local_dust_force[bin]+=dy/pow(dr2,1.5);
+        dr2 = dx*dx + dy*dy + ds2;
+        local_dust_force[bin] += dy/pow(dr2,1.5);
         local_particles[bin]++;
       }
     }

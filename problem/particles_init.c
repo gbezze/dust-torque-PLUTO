@@ -17,20 +17,6 @@
 /* ///////////////////////////////////////////////////////////////////// */
 #include "pluto.h"
 
-double integrate(double (*func)(double), double a, double b) {
-  int n = 1e3;
-  double h = (b - a) / n;     // step size
-  double sum = 0.5 * (func(a) + func(b));
-
-  for (int i = 1; i < n; i++) {
-      double x = a + i * h;
-      sum += func(x);
-  }
-
-  return sum * h;
-}
-
-
 double dust_radial_exp(double size){
 
   //empyrical power law exponent for stationary dust distribution
@@ -60,6 +46,23 @@ double dust_radial_distribution(double size, double ri, double ro, double rb, do
 
 }
 
+double integrate_pdf(double a, double b, double size, double ri, double ro, double rb) {
+  
+  // a, b: extremes of the integral
+  // size, ri, ro, rb: pdf parameters
+
+  int n = 1e5;
+  double h = (b - a) / n;
+  double sum = 0.5 * (dust_radial_distribution(size, ri, ro, rb, a) + dust_radial_distribution(size, ri, ro, rb, b));
+
+  for (int i = 1; i < n; i++) {
+      double x = a + i * h;
+      sum += dust_radial_distribution(size, ri, ro, rb, x);
+  }
+
+  return sum * h;
+}
+
 double generate_random_radius(double size, double ri, double ro, double rb){
 
   //generate random radius from stationary distribution with rejection method
@@ -72,18 +75,11 @@ double generate_random_radius(double size, double ri, double ro, double rb){
   while ((found==0)&&(N_try<100)){
 
     r = ri+(rand()/(1.+RAND_MAX))*(ro-ri);
-    X = (rand()/(1.+RAND_MAX)); //dust density normalized at 1 for r=rb
+    X = (rand()/(1.+RAND_MAX)); //dust density is normalized at 1 for r=rb
 
     pdf=dust_radial_distribution(size, ri, ro, rb, r);
-    
-    //injection zone distribution linear cutoff (0 at r_end and 1 at r_damping)
-    // double K = 1.;
-    // if (r>rd){
-    //   K=(ro-r)/(ro-rd);
-    // }
 
     N_try++;
-    
     if (X<pdf){
       found=1;
     }
@@ -183,7 +179,20 @@ void Particles_Init(Data *d, Grid *grid)
 
       Particles_Insert (&part, d, PARTICLES_CREATE, grid);
     }
+
     if (prank==0){
+
+      
+      for (bin = 0; bin < NBIN_DUST; bin++) {
+        //calculate expected number of particles in injection zone based on pdf and N_particles
+  
+        double P_injection=integrate_pdf(injection_boundary, outer_radius, dust_size_array[bin-INIT_BIN_DUST], inner_radius, outer_radius, injection_boundary);
+        double P_total=integrate_pdf(inner_radius, outer_radius, dust_size_array[bin-INIT_BIN_DUST], inner_radius, outer_radius, injection_boundary);
+  
+        particle_count_outer[i]=ceil((P_injection/P_total)*(np_glob/NBIN_DUST));
+  
+      }
+  
       printf("PARTICLES GENERATED:\n");
       printf("| outer dust radius:  %e \n",outer_radius);
       printf("| inner dust radius:  %e \n",inner_radius);

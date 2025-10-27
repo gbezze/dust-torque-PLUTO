@@ -4,7 +4,7 @@ import pyPLUTO.pload as pp
 import pyPLUTO.Image as img
 import particles_read as pr
 import matplotlib.pyplot as plt
-import astropy.units as u
+import astropy.constants as const
 from scipy.stats import norm
 from scipy.optimize import curve_fit
 from pathlib import Path
@@ -191,7 +191,7 @@ def read_force():
 def plot_dist_gaussian(data):
 
     plt.figure()
-    counts, bins, _ = plt.hist(data, bins='auto', density=True, alpha=0.6, color='mediumturquoise')
+    counts, bins, _ = plt.hist(data, bins='auto', density=True, alpha=0.6, color='teal')
 
     # Fit a normal distribution to the data
     avg, sigma = norm.fit(data)
@@ -202,13 +202,12 @@ def plot_dist_gaussian(data):
     err = sigma/np.sqrt(len(data))
 
     # Plot the fitted Gaussian
-    plt.plot(x, pdf, 'darkred', linewidth=2, label=f'Fit: μ={avg:.2e}, σ={sigma:.2e}',alpha=0.5)
+    plt.plot(x, pdf, 'darkred', linewidth=2, label=f'Gaussian fit \n $\mu=${avg:.2e}\n $\sigma$={sigma:.2e}',alpha=0.5)
     plt.plot([avg, avg], [0, norm.pdf(avg, avg, sigma)], color= 'teal',linestyle='--')
     plt.legend()
-    plt.xlabel("Value")
+    plt.xlabel(r"Normalized force $\tilde f$")
     plt.ylabel("Distribution density")
-    plt.title("Force distribution")
-    plt.show("")
+    plt.grid()
     
     print(f"Average: {avg:.3e} +/- {3*err:.3e}")
     print(f"STD: {sigma:.3e}")
@@ -218,13 +217,29 @@ def plot_dist_gaussian(data):
 
 def fit_gaussian(data):
 
+    def gaussian(x, A, mu, sigma):
+        return A * np.exp(-0.5 * ((x - mu) / sigma)**2)
+
     # Fit a normal distribution to the data
+    #use norm.fit first (fast and robust)
     avg, sigma = norm.fit(data)
+
+    #use curve_fit (estimates covariance)
+    counts, bins = np.histogram(data, bins='auto', density=True)
+    bin_centers = 0.5 * (bins[1:] + bins[:-1])
+    popt, pcov= curve_fit(gaussian, bin_centers, counts, [max(counts),avg,sigma], maxfev=10000)
+
+    avg=popt[1]
+    sigma=popt[2]
+
+    avg, sigma = norm.fit(data)
+
     # Generate the Gaussian curve
     x = np.linspace(bins[0], bins[-1], 100)
     pdf = norm.pdf(x, avg, sigma)
 
-    err = sigma/np.sqrt(len(data))
+    #err = sigma/np.sqrt(len(data))
+    err=np.sqrt(pcov[1,1])
 
     return avg, sigma, err
 
@@ -274,18 +289,71 @@ def radial_distribution(S,step_start,step_end, plotting=True):
     
     return exponent, exp_err
 
-def dust_radial_exponent_p(x):
-    #fitted model
+def dust_radial_exponent_p(size):
+    #fitted model, size in cm
 
-    u=x/3.369
+    u=size/3.369
     return 2.246*np.log10(u**1.000+u**-0.124)
+
+def torque_0(M_ratio):
+
+    #all in kg m s
+
+    # planet orbit
+    G = 6.674e-11
+    a = 1.496e11
+    M_star = 1.989e30
+    Omega_k = np.sqrt(G*M_star/(a**3))
+
+    # disk properties
+    h=0.05
+    Sigma_0 = 1e4 #[kg/m2]
+
+    torque= M_ratio**2 * a**4 * Omega_k**2 * Sigma_0 / h**2
+
+    return torque
+
+def torque_factor_density(size):
+    #computes the torque factor to have a prescribed local dust/gas ratio
+
+    G = 6.6743e-11 # [m3 / kg s2]
+    AUtom = 1.496e11 # Astronomical unit in meters (AU * AUtom = m)
+
+    q=dust_radial_exponent_p(size)
+
+    rp = 1 * AUtom
+    ri = 0.5 * AUtom * 1.1
+    ro = 1.8 * AUtom * 0.9
+
+    Sigma_gas = 1e4 #[kg / m2]
+    
+    dust_gas_ratio = 0.001
+
+    M_dust = 2 * np.pi * Sigma_gas * dust_gas_ratio * (ro**q - ri**q) / ((q+1)*rp**(q-1))
+    
+    # PLUTO calculates y/r^3 in units of 1/AU^2 so we need to convert it
+    conv_factor=AUtom**2
+
+    torque_factor=G*M_dust*rp*conv_factor
+    
+    return torque_factor
+
+def torque_gas(n,M_ratio):
+    
+    torque = -(3.2+1.468*n)*torque_0(M_ratio)
+
+    return torque
 
 #%%
 
 #dust_hist(step=[0,9,19],S=9)
 
+nice_plots()
+
 t_stat = 100
-size_bin=10
+size_bin=9
+
+M_ratio = 1e-5
 
 time, force, counts, N_bins, bins = read_force()
 
@@ -293,16 +361,27 @@ avg_counts = np.mean(counts[time>t_stat,:],axis=0)
 
 plot_dist_gaussian(force[time>t_stat,size_bin])
 
-avg_force=np.zeros(N_bins)
-sigma_force=np.zeros(N_bins)
-err_force=np.zeros(N_bins)
+avg_torque=np.zeros(N_bins)
+sigma_torque=np.zeros(N_bins)
+err_torque=np.zeros(N_bins)
 
+torque_g=torque_gas(1,M_ratio)/torque_0(M_ratio)
 
 for i in range(N_bins):
-    avg_force[i], sigma_force[i], err_force[i] = fit_gaussian(force[time>t_stat,i])
+
+    size = bins[i]
+    torque_samples = torque_factor_density(size) * (force[time>t_stat,i]/avg_counts[i]) / torque_0(M_ratio)
+    avg_torque[i], sigma_torque[i], err_torque[i] = fit_gaussian(torque_samples)
 
 plt.figure()
-plt.errorbar(bins, avg_force, yerr=3*err_force, color='darkgreen',fmt='o')
+plt.errorbar(bins, avg_torque, yerr=3*err_torque, color='darkgreen',fmt='o',label='$<\Gamma_d>$')
+plt.axhline(y=0, color='k', linewidth=1)
+plt.axhline(y=-torque_g, color='darkred', linestyle='--',linewidth=1,label='$-\Gamma_g$')
 plt.xscale('log')
+plt.legend()
+plt.grid(which='both')
+plt.xlabel('Dust size [cm]')
+plt.ylabel(r'Dust torque $<\Gamma_d>$ [$\Gamma_\ast$]')
 
+print(time[-1])
 # %%

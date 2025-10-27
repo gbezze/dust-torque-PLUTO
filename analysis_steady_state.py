@@ -133,42 +133,7 @@ def positions(step):
 
     # calculate individual particle tangential force on planet
 
-    return x_part, y_part, size_part, size_bins , time, x_planet, y_planet, t_planet
-
-
-    plt.figure()
-    x, y, size_part, size_bins, time, x_planet, y_planet, t_planet = positions(step)
-    
-    r = np.sqrt(y**2+x**2)
-    angle = np.arctan2(y,x)
-
-    r_planet = np.sqrt(x_planet**2+y_planet**2)
-    angle_planet = np.arctan2(y_planet,x_planet)
-    # plt.scatter(angle, radius, s=0.2, c=size_part, cmap='viridis')
-    # plt.scatter(angle_planet, r_planet, s=10, c='black')
-
-    angle_relative = angle -angle_planet
-    angle_relative[angle_relative>np.pi] -= 2*np.pi
-    angle_relative[angle_relative<-np.pi] += 2*np.pi
-
-    size_index = (size_part==size_bins[S])
-
-    plt.figure()
-    plt.scatter(angle_relative[size_index], r[size_index], s=0.2, c=size_part[size_index], cmap='brg')
-    plt.scatter(0, r_planet, s=10, c='black')
-    plt.xlim(-np.pi,np.pi)
-
-    plt.figure()
-    plt.hist(r[size_part==size_part[S]], bins=100)
-
-    
-    smoothing_factor=1.
-    m_ratio = 1e-4 #planet to star mass ratio
-
-    hill_radius = r_planet * (m_ratio/3)**(1/3)
-    d_smooth = smoothing_factor*hill_radius
-
-    return d_smooth
+    return x_part, y_part, size_part, size_bins , time, x_planet, y_planet, t_planet, tau_part
 
 def read_force():
     
@@ -204,7 +169,7 @@ def radial_distribution(S,step_start,step_end, plotting=True):
     for i in range(N_steps):
 
         step= step_start +i
-        x, y, size_part, size_bins, time, x_planet, y_planet, t_planet = positions (step)
+        x, y, size_part, size_bins, time, x_planet, y_planet, t_planet, tau_part = positions (step)
 
         size_index = (size_part==size_bins[S])
         r= np.sqrt(x[size_index]**2 +y[size_index]**2)
@@ -316,4 +281,25 @@ plt.grid()
 
 plt.figure()
 
-# %%
+# %% Stokes Number
+
+output_dir = r'./problem/out_stationary/'
+
+def get_stokes(step):
+
+    x, y, size_part, size_bins, time, x_planet, y_planet, t_planet, tau_part = positions (step)
+
+    rp=1.
+    OmegaK=1.
+
+    stokes = tau_part*OmegaK
+
+    stokes_avg=0
+
+    return size_bins, stokes_avg
+
+
+steps=np.linspace(0,30,1)
+
+r_planet=0.1
+    
