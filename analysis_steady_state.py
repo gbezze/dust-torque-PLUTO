@@ -1,6 +1,8 @@
 #%%
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+import matplotlib.cm as cm
 from particles_read import NStepStr
 from scipy.stats import norm
 from scipy.optimize import curve_fit
@@ -10,7 +12,7 @@ import os
 
 global output_dir
 
-output_dir = r'./problem/out_stationary/'
+output_dir = r'./problem/out_stat/'
 
 def ReadPartData(ns):
 
@@ -87,6 +89,15 @@ def nice_plots(
         palette = ["firebrick", "mediumseagreen", "darkorchid", "gold", "deepskyblue"]
     plt.rcParams["axes.prop_cycle"] = cycler(color=palette)
 
+    # colormap
+    colors = ["#AEEB52", "#DB8640", "#AD2B6A"]
+    custom_cmap = mcolors.LinearSegmentedColormap.from_list("sanmartino", colors, N=256)
+    try:
+        plt.register_cmap(name="sanmartino", cmap=custom_cmap)
+    except:
+        pass
+
+    plt.set_cmap(custom_cmap)
     # --- Math font settings ---
     if use_math:
         plt.rcParams.update({
@@ -94,9 +105,12 @@ def nice_plots(
             "mathtext.rm": "EB Garamond",
             "mathtext.it": "EB Garamond:italic",
             "mathtext.bf": "EB Garamond:bold",
+            "mathtext.cal": "cmsy10",   # restore standard mathcal font
         })
 
     print("✅ EB Garamond style configured for Matplotlib.")
+
+    return custom_cmap
 
 def positions(step):
 
@@ -177,16 +191,16 @@ def radial_distribution(S,step_start,step_end, plotting=True):
 
     # fit power law, exclude damping zones
 
-    rmax = 1.5
-    rmin = 0.7
-    r_outer = 0.9 * rmax
-    r_inner = 1.1 * rmin
-
-    # rmax = 1.8
-    # rmin = 0.5
+    # rmax = 1.5
+    # rmin = 0.7
     # r_outer = 0.9 * rmax
     # r_inner = 1.1 * rmin
-    # r_outer= r_outer-(r_outer-r_inner)*0.1
+
+    rmax = 1.8
+    rmin = 0.5
+    r_outer = 0.9 * rmax
+    r_inner = 1.1 * rmin
+    r_outer= r_outer-(r_outer-r_inner)*0.1
 
     if plotting:
         plt.figure()
@@ -213,19 +227,16 @@ def radial_distribution(S,step_start,step_end, plotting=True):
     
     return exponent, exp_err
 
-size=99
-t_stat = 0
+#%% q_slope calculation
 
-nice_plots()
+cmap=nice_plots()
 
 time, force, counts, N_bins, bin_sizes = read_force()
-
-#dust slope calculation
 
 exps = np.zeros(N_bins)
 errs = np.zeros(N_bins)
 for i in range(N_bins):
-    exps[i], errs[i] = radial_distribution(i,17,30,plotting=False)
+    exps[i], errs[i] = radial_distribution(i,17,20,plotting=False)
 
 def dust_radial_exponent(x,x0,a,b,n):
     #for model fitting
@@ -244,7 +255,7 @@ def dust_radial_exponent_p(x):
     u=x/3.369
     return 2.246*np.log10(u**1.000+u**-0.124)
 
-popt, pcov = curve_fit(dust_radial_exponent,bin_sizes,exps,[2,-0.27,2.4,0.4],errs)
+popt, pcov = curve_fit(dust_radial_exponent,bin_sizes,exps,[2,-0.2,1,0.4],errs)
 
 print("")
 print("OPTIMAL PARAMETERS for q(S)= K log10( (s/s0)^a + (s/s0)^b )")
@@ -256,50 +267,131 @@ print(" b  =  "+str(popt[2]*popt[3]))
 
 #old version: s0=1.99 K=1.162 a=1.012 b=-0.258
 
-# %%
+# %% q exponent law plot
 
-plt.figure()
-plt.errorbar(bin_sizes, exps, yerr=errs, color='darkgreen',fmt='o', alpha=0.5,label='simulation ($\pm$ 1 std)')
-plt.plot(bin_sizes,dust_radial_exponent(bin_sizes,*popt),linewidth=3., label='$q\ (s)$ fit')
+plt.figure(figsize=(7,4))
+plt.errorbar(bin_sizes, exps, yerr=3*errs, color='darkgreen',fmt='o', alpha=0.5,label='$q_j$ distribution fit ($\pm$ 3$\sigma$)')
+plt.xscale('log')
+plt.plot(bin_sizes,dust_radial_exponent(bin_sizes,*popt),linewidth=3., label='$q(s)$ empyrical law')
 #plt.plot(bin_sizes,dust_radial_exponent_p(bin_sizes),linewidth=3., label='$q\ (s)$ fit')
 
-plt.xscale('log')
 plt.xlabel("dust size $s$ [cm]")
-plt.ylabel(r"radial distribution exponent  $\frac{d \ \log N_p}{d \ \log r}$")
+plt.ylabel(r"radial distribution exponent  $q=\frac{d \ \log N_p}{d \ \log r}$")
 plt.legend(loc='upper center',fancybox=False,framealpha=1.)
-plt.title('Steady state dust exponent')
 plt.grid(which='both')
+plt.savefig('output_plots/q_fit.pdf',bbox_inches='tight')
+
 
 # %% particle counts
 
-plt.figure()
-for i in range(N_bins):
-    plt.plot(time,counts[:,i],label=str(bin_sizes[i]),c=plt.cm.rainbow(i/N_bins),alpha=0.3)
-plt.xlabel('Time [years]')
-plt.ylabel('Nuber of particles in domain')
-plt.grid()
+cmap=nice_plots()
 
-plt.figure()
+plt.figure(figsize=(10,5))
+for i in range(N_bins):
+
+    j= N_bins -i -1
+    formatted_size = f"{bin_sizes[j]:.3f}"
+    plt.plot(time[::100],counts[::100,j],label=formatted_size,c=cmap(i/N_bins),alpha=1)
+plt.xlabel('time $t$ [$2\pi / \Omega_p$]')
+plt.ylabel('Nuber of particles per size bin $N_p$')
+plt.grid()
+#
+plt.legend(fontsize=12,title='particle size $s$ [cm]',ncols=5, bbox_to_anchor=(0.5, -0.2), loc='upper center', fancybox=False, framealpha=0.)
+
+plt.savefig('output_plots/particle_counts.pdf',bbox_inches='tight')
 
 # %% Stokes Number
 
-output_dir = r'./problem/out_stationary/'
+output_dir = r'./problem/out/'
+
+cmap=nice_plots()
 
 def get_stokes(step):
 
-    x, y, size_part, size_bins, time, x_planet, y_planet, t_planet, tau_part = positions (step)
-
-    rp=1.
-    OmegaK=1.
-
-    stokes = tau_part*OmegaK
-
-    stokes_avg=0
-
-    return size_bins, stokes_avg
-
-
-steps=np.linspace(0,30,1)
-
-r_planet=0.1
     
+    AU = 1.496e11 # Astronomical unit in meters
+    MSUN = 1.98e30 # Solar mass in kg
+    YEAR = 3.1557e7 # Year in seconds
+
+    rp=1 * AU
+    M_star= 1 * MSUN
+    t_sim = 1 * YEAR
+
+    delta_r= 0.01 * AU
+    
+    G = 6.6743e-11 # in kms units
+
+    x, y, size_part, size_bins, time, x_planet, y_planet, t_planet, tau_part = positions (step)
+    r=np.sqrt(x**2+y**2) * AU
+    tau_part = tau_part * YEAR
+
+    OmegaK=np.sqrt(G*M_star/(rp**3))
+
+    stokes_part = tau_part*OmegaK
+
+    r_filter = (r>rp-delta_r) & (r<rp+delta_r)
+
+    stokes_avg = np.zeros(len(size_bins))
+    stokes_err = np.zeros(len(size_bins))
+
+    for i in range(len(size_bins)):
+
+        size_filter = (size_part == size_bins[i])
+        stokes_filtered = stokes_part[r_filter & size_filter]
+        stokes_avg[i] = np.average(stokes_filtered)
+        stokes_err = 0.5*(max(stokes_filtered)-min(stokes_filtered))
+
+    size_bins = size_bins * AU *100
+
+    return size_bins, stokes_avg, stokes_err
+
+size, stokes, stokes_err = get_stokes(10)
+
+plt.figure()
+plt.plot(size,stokes)
+plt.grid(which='both')
+plt.xscale('log')
+plt.yscale('log')
+plt.xlabel('Particle size [cm]')
+plt.ylabel(r'Stokes number $\mathcal{S}$')
+
+def plot_stokes(step,cmap):
+
+    
+    AU = 1.496e11 # Astronomical unit in meters
+    MSUN = 1.98e30 # Solar mass in kg
+    YEAR = 3.1557e7 # Year in seconds
+
+    rp=1 * AU
+    M_star= 1 * MSUN
+    t_sim = 1 * YEAR
+
+    delta_r= 1 * AU
+    
+    G = 6.6743e-11 # in kms units
+
+    x, y, size_part, size_bins, time, x_planet, y_planet, t_planet, tau_part = positions (step)
+    r=np.sqrt(x**2+y**2) * AU
+    tau_part = tau_part * YEAR
+
+    OmegaK=np.sqrt(G*M_star/(rp**3))
+    Omega_part = np.sqrt(G*M_star/(r**3))
+    
+    stokes_part = tau_part*Omega_part
+
+    r_filter = (r>rp-delta_r) & (r<rp+delta_r)
+
+    for i in range(len(size_bins)):
+
+        size_filter = (size_part == size_bins[i])
+        stokes_filtered = stokes_part[r_filter & size_filter]
+        radius_filtered = r[r_filter & size_filter]/AU
+        plt.scatter(stokes_filtered, radius_filtered, s=1,label=f'size {size_bins[i]:.3f} cm', alpha=0.5, c=cmap(i/len(size_bins)))
+
+plt.figure()
+plot_stokes(10,cmap)
+plt.xscale('log')
+plt.grid(which='both')
+plt.xlabel(r'Stokes number $\mathcal{S}$')
+plt.ylabel('Radial position [AU]')
+# %%

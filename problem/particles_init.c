@@ -22,9 +22,12 @@ double dust_radial_exp(double size){
   //empyrical power law exponent for stationary dust distribution
   //size in cm
 
-  double x=size/3.369;
-  double exponent = 2.246*log10(pow(x,1.000)+pow(x,-0.124));
+  double x=size/2.827;
+  double exponent = 2.241*log10(pow(x,0.0672)+pow(x,-0.066));
   //printf("size: %e, exponent %e", size, exponent);
+
+  //exponent = 0.01; //delete this if not for test
+
   return exponent;
 }
 
@@ -39,7 +42,8 @@ double dust_radial_distribution(double size, double ri, double ro, double rb, do
   }
   else{
       //injection zone distribution (0 at r_end and 1 at r_damping)
-      pdf = pow(r/rb,-1*q) * (log10(r/ro)/log10(rb/ro));
+      //pdf = pow(r/rb,-1*q) * (log10(r/ro)/log10(rb/ro));
+      pdf = pow(r/rb,-1*q) * ((r*r-ro*ro)/(rb*rb-ro*ro));
   }
 
   return pdf;
@@ -188,8 +192,7 @@ void Particles_Init(Data *d, Grid *grid)
   
         double P_injection=integrate_pdf(injection_boundary, outer_radius, dust_size_array[bin-INIT_BIN_DUST], inner_radius, outer_radius, injection_boundary);
         double P_total=integrate_pdf(inner_radius, outer_radius, dust_size_array[bin-INIT_BIN_DUST], inner_radius, outer_radius, injection_boundary);
-  
-        particle_count_outer[i]=ceil((P_injection/P_total)*(np_glob/NBIN_DUST));
+        particle_count_outer[bin]=ceil((P_injection/P_total)*(np_glob/NBIN_DUST));
   
       }
   

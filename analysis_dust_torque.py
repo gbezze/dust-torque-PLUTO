@@ -13,48 +13,42 @@ import os
 
 global output_dir
 
-output_dir = r'./problem/out/'
+output_dir = r'./problem/out_m1e-5/'
 
 def nice_plots():
+    
     font_dir = r"/home/bezze/ebgaramond"
     palette = None
     font_size = 14
     use_math = True
 
-    """
-    Configure Matplotlib to use EB Garamond with an optional custom color palette and math setup.
-
-    Parameters
-    ----------
-    font_dir : str
-        Directory containing EB Garamond .ttf files (Regular, Italic, Bold, etc.).
-    palette : list of str
-        Custom list of hex color codes for plotting.
-    font_size : int
-        Base font size for text.
-    use_math : bool
-        If True, sets mathtext to use Garamond italic / roman variants.
-    """
-
     font_dir = Path(font_dir)
     if not font_dir.exists():
         raise FileNotFoundError(f"Font directory not found: {font_dir}")
 
-    # --- Register fonts ---
+    # Register fonts
     for font_file in font_dir.glob("EBGaramond*.ttf"):
         fm.fontManager.addfont(str(font_file))
 
-    # --- Set base font ---
+    # Set base font
     plt.rcParams["font.family"] = "EB Garamond"
     plt.rcParams["font.size"] = font_size
     plt.rcParams["axes.titleweight"] = "bold"
 
-    # --- Color palette ---
+    # Color palette
     if palette is None:
         palette = ["firebrick", "mediumseagreen", "darkorchid", "gold", "deepskyblue"]
     plt.rcParams["axes.prop_cycle"] = cycler(color=palette)
 
-    # --- Math font settings ---
+    # Grid color
+    plt.rcParams['grid.color'] = 'black'
+    plt.rcParams['grid.alpha'] = 0.2
+    plt.rcParams['grid.linewidth'] = 0.7
+
+    #legend
+    plt.rcParams['legend.fancybox'] = False
+
+    # Math font settings
     if use_math:
         plt.rcParams.update({
             "mathtext.fontset": "custom",
@@ -174,35 +168,18 @@ def read_force():
 
     return time, force, counts, N_bins, bins
 
-
-    half = window_size // 2
-    X_avg = np.zeros_like(X, dtype=float)
-    X_err = np.zeros_like(X, dtype=float)
-    
-    for i in range(len(X)):
-        start = max(0, i - half)
-        end = min(len(X), i + half + 1)
-        window = X[start:end]
-        X_avg[i] = np.mean(window, axis=0)
-        X_err[i] = np.std(window, axis=0)/np.sqrt(len(window))
-    
-    return X_avg, X_err
-
 def plot_dist_gaussian(data):
 
     plt.figure()
     counts, bins, _ = plt.hist(data, bins='auto', density=True, alpha=0.6, color='teal')
 
     # Fit a normal distribution to the data
-    avg, sigma = norm.fit(data)
-    # Generate the Gaussian curve
-    x = np.linspace(bins[0], bins[-1], 100)
-    pdf = norm.pdf(x, avg, sigma)
-
-    err = sigma/np.sqrt(len(data))
+    avg, sigma, err = fit_gaussian(data)
+    bin_centers = 0.5 * (bins[1:] + bins[:-1])
+    pdf = norm.pdf(bin_centers, avg, sigma)
 
     # Plot the fitted Gaussian
-    plt.plot(x, pdf, 'darkred', linewidth=2, label=f'Gaussian fit \n $\mu=${avg:.2e}\n $\sigma$={sigma:.2e}',alpha=0.5)
+    plt.plot(bin_centers, pdf, 'darkred', linewidth=2, label=f'Gaussian fit \n $\mu=${avg:.2e}\n $\sigma$={sigma:.2e}',alpha=0.5)
     plt.plot([avg, avg], [0, norm.pdf(avg, avg, sigma)], color= 'teal',linestyle='--')
     plt.legend()
     plt.xlabel(r"Normalized force $\tilde f$")
@@ -211,7 +188,6 @@ def plot_dist_gaussian(data):
     
     print(f"Average: {avg:.3e} +/- {3*err:.3e}")
     print(f"STD: {sigma:.3e}")
-
 
     return avg, sigma, err
 
@@ -344,18 +320,20 @@ def torque_gas(n,M_ratio):
 
     return torque
 
-#%%
+#%% Calcuate dust torque
 
 #dust_hist(step=[0,9,19],S=9)
 
 nice_plots()
 
 t_stat = 100
-size_bin=9
+size_bin=6
 
 M_ratio = 1e-5
 
 time, force, counts, N_bins, bins = read_force()
+
+
 
 avg_counts = np.mean(counts[time>t_stat,:],axis=0)
 

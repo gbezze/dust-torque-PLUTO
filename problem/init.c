@@ -143,12 +143,15 @@ void Analysis (const Data *d, Grid *grid)
   r_planet = sqrt(g_nb.x[1]*g_nb.x[1]+g_nb.y[1]*g_nb.y[1]);
 
   //potential smoothing length
-  ds2=POW2(DUST_SMOOTHING_FACTOR*r_planet*pow(g_nb.m[1]/(3*g_nb.m[0]),1/3));
+  if (g_inputParam[DUST_SMOOTHING_FACTOR] > 0){
+    //hill radius smoothing
+    ds2=POW2(g_inputParam[DUST_SMOOTHING_FACTOR]*r_planet*pow(g_nb.m[1]/(3*g_nb.m[0]),1/3));
+  }
 
   //loop on particles
   PARTICLES_LOOP(CurNode, d->PHead){
     part = &(CurNode->p);
-    r_part=part->radius*UNIT_LENGTH;
+    r_part=part->radius*UNIT_LENGTH; //particle radius in cm
     //loop on particle size
     for (bin = 0; bin < NBIN_DUST; bin++) 
     {
@@ -163,6 +166,15 @@ void Analysis (const Data *d, Grid *grid)
         // if (bin==1){
         //   printf("r_part: %6e,  dust_bin: %6e",r_part,dust_size_array[bin]);
         // }
+
+        // Hd-based smoothing length
+        if (g_inputParam[DUST_SMOOTHING_FACTOR]<0){
+          double H = part->coord[IDIR]*g_inputParam[ASPECT_RATIO];
+          double OmegaK = sqrt(G_MU/part->coord[IDIR])/part->coord[IDIR];
+          double Stokes = part->tau_s*OmegaK;
+          ds2=POW2(0.7*H)*g_inputParam[ALPHA]/(g_inputParam[ALPHA]+Stokes);
+        }
+
         //particle polar coordinates
         r_part = part->coord[IDIR];
         phi_part = part->coord[JDIR];
