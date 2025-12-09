@@ -13,7 +13,7 @@ import os
 
 global output_dir
 
-output_dir = r'./problem/out_m1e-5/'
+output_dir = r'./problem/out_m3e-6/'
 
 def nice_plots():
     
@@ -117,6 +117,7 @@ def dust_plot(step,S):
     plt.scatter(angle_relative[size_index], r[size_index], s=0.2, c=size_part[size_index], cmap='brg')
     plt.scatter(0, r_planet, s=10, c='black')
     plt.xlim(-np.pi,np.pi)
+    plt.ylim(r_planet*0.9,r_planet*1.1)
 
     plt.figure()
     plt.hist(r[size_part==size_part[S]], bins=100)
@@ -133,8 +134,6 @@ def dust_hist(step,S):
 
     plt.legend()
     plt.show()
-
-def smoothing_length(r_planet):
     
     smoothing_factor=1.
     m_ratio = 1e-4 #planet to star mass ratio
@@ -156,6 +155,7 @@ def read_force():
 
         time=np.zeros(N_times)
         force=np.zeros((N_times,N_bins))
+        force=np.zeros((N_times,N_bins))
         counts=np.zeros((N_times,N_bins))
 
         bins=np.zeros(N_bins)
@@ -168,32 +168,10 @@ def read_force():
 
     return time, force, counts, N_bins, bins
 
-def plot_dist_gaussian(data):
-
-    plt.figure()
-    counts, bins, _ = plt.hist(data, bins='auto', density=True, alpha=0.6, color='teal')
-
-    # Fit a normal distribution to the data
-    avg, sigma, err = fit_gaussian(data)
-    bin_centers = 0.5 * (bins[1:] + bins[:-1])
-    pdf = norm.pdf(bin_centers, avg, sigma)
-
-    # Plot the fitted Gaussian
-    plt.plot(bin_centers, pdf, 'darkred', linewidth=2, label=f'Gaussian fit \n $\mu=${avg:.2e}\n $\sigma$={sigma:.2e}',alpha=0.5)
-    plt.plot([avg, avg], [0, norm.pdf(avg, avg, sigma)], color= 'teal',linestyle='--')
-    plt.legend()
-    plt.xlabel(r"Normalized force $\tilde f$")
-    plt.ylabel("Distribution density")
-    plt.grid()
-    
-    print(f"Average: {avg:.3e} +/- {3*err:.3e}")
-    print(f"STD: {sigma:.3e}")
-
-    return avg, sigma, err
-
 def fit_gaussian(data):
 
-    def gaussian(x, A, mu, sigma):
+    def gaussian(x, mu, sigma):
+        A = (2 * np.pi * sigma**2)**-0.5
         return A * np.exp(-0.5 * ((x - mu) / sigma)**2)
 
     # Fit a normal distribution to the data
@@ -203,19 +181,17 @@ def fit_gaussian(data):
     #use curve_fit (estimates covariance)
     counts, bins = np.histogram(data, bins='auto', density=True)
     bin_centers = 0.5 * (bins[1:] + bins[:-1])
-    popt, pcov= curve_fit(gaussian, bin_centers, counts, [max(counts),avg,sigma], maxfev=10000)
+    popt, pcov= curve_fit(gaussian, bin_centers, counts, [avg,sigma], maxfev=10000)
 
-    avg=popt[1]
-    sigma=popt[2]
-
-    avg, sigma = norm.fit(data)
+    avg=popt[0]
+    sigma=popt[1]
 
     # Generate the Gaussian curve
     x = np.linspace(bins[0], bins[-1], 100)
     pdf = norm.pdf(x, avg, sigma)
 
     #err = sigma/np.sqrt(len(data))
-    err=np.sqrt(pcov[1,1])
+    err=3*np.sqrt(pcov[1,1])
 
     return avg, sigma, err
 
@@ -268,8 +244,8 @@ def radial_distribution(S,step_start,step_end, plotting=True):
 def dust_radial_exponent_p(size):
     #fitted model, size in cm
 
-    u=size/3.369
-    return 2.246*np.log10(u**1.000+u**-0.124)
+    u=size/2.827
+    return 2.246*np.log10(u**0.627+u**-0.066)
 
 def torque_0(M_ratio):
 
@@ -277,15 +253,15 @@ def torque_0(M_ratio):
 
     # planet orbit
     G = 6.674e-11
-    a = 1.496e11
+    rp = 1.496e11
     M_star = 1.989e30
-    Omega_k = np.sqrt(G*M_star/(a**3))
+    Omega_k = np.sqrt(G*M_star/(rp**3))
 
     # disk properties
     h=0.05
     Sigma_0 = 1e4 #[kg/m2]
 
-    torque= M_ratio**2 * a**4 * Omega_k**2 * Sigma_0 / h**2
+    torque= M_ratio**2 * rp**4 * Omega_k**2 * Sigma_0 / h**2
 
     return torque
 
@@ -298,15 +274,16 @@ def torque_factor_density(size):
     q=dust_radial_exponent_p(size)
 
     rp = 1 * AUtom
-    ri = 0.5 * AUtom * 1.1
-    ro = 1.8 * AUtom * 0.9
+    rid = 0.5 * AUtom * 1.1
+    rod = 1.8 * AUtom * 0.9
+    rb = rod - (rod-rid)*0.1
 
     Sigma_gas = 1e4 #[kg / m2]
     
-    dust_gas_ratio = 0.001
+    dust_gas_ratio = 0.01
 
-    M_dust = 2 * np.pi * Sigma_gas * dust_gas_ratio * (ro**q - ri**q) / ((q+1)*rp**(q-1))
-    
+    M_dust = 2 * np.pi * Sigma_gas * dust_gas_ratio * (rb**(q+2) - rid**(q+2)) / ((q+2)*rp**q)
+
     # PLUTO calculates y/r^3 in units of 1/AU^2 so we need to convert it
     conv_factor=AUtom**2
 
@@ -316,50 +293,161 @@ def torque_factor_density(size):
 
 def torque_gas(n,M_ratio):
     
-    torque = -(3.2+1.468*n)*torque_0(M_ratio)
+    torque = -(1.364-0.541*n)*torque_0(M_ratio)
 
     return torque
 
-#%% Calcuate dust torque
+def autocorrelation(f):
 
-#dust_hist(step=[0,9,19],S=9)
+    n = len(f)    
+    f -= np.mean(f)
+    
+    # FFT-based autocorrelation
+    F = np.fft.fft(f, n=2*n)
+    acf = np.fft.ifft(F * np.conjugate(F))[:n].real
+
+    # Unbiased normalization
+    acf /= (np.arange(n, 0, -1))
+    
+    # Normalize so that acf[0] = 1
+    acf /= acf[0]
+
+    # Sokal's method to estimate integrated autocorrelation time
+    c = 5
+    tau = 0.5  # initial value
+
+    for W in range(1, n):
+        # compute τint(W) = 1/2 + sum_{t=1}^W ρ(t)
+        tau_new = 0.5 + np.sum(acf[1:W])
+
+        # stopping criterion: W > c * τint(W)
+        if W > c * tau_new:
+            tau = tau_new
+            break
+        tau = tau_new
+
+    return acf, tau
+
+def stats(data):
+
+    # compute average, std and error considering autocorrelation time
+
+    avg = np.mean(data)
+    sigma = np.std(data)
+
+    n = len(data)
+    _, n_acf = autocorrelation(data)
+    N_effective = n / (2*n_acf +1)
+
+    err = 3*sigma/np.sqrt(N_effective)
+
+    return avg, sigma, err
+
+
+#%% Plot autocorrelation
 
 nice_plots()
 
-t_stat = 100
-size_bin=6
+t_stat = 200
+size_bin = 2
 
-M_ratio = 1e-5
+M_ratio = 3e-6
 
-time, force, counts, N_bins, bins = read_force()
-
-
+time, torque_normalized, counts, N_bins, bins = read_force()
 
 avg_counts = np.mean(counts[time>t_stat,:],axis=0)
 
-plot_dist_gaussian(force[time>t_stat,size_bin])
+Deltat=time[-1]/len(time)
 
-avg_torque=np.zeros(N_bins)
-sigma_torque=np.zeros(N_bins)
-err_torque=np.zeros(N_bins)
+plt.figure(figsize=(8,3))
+plt.plot(time[-1500:-1],torque_normalized[-1500:-1,size_bin],markerfacecolor='white')
+plt.grid()
+plt.xlabel('time $t \ [2\pi / \\Omega_p]$')
+plt.ylabel(r'normalized torque $ \tilde{\xi} \ ( t )$')
+plt.axhline(y=0, color='k', linewidth=0.5)
+plt.ylim(-0.1,0.1)
+plt.xlim(time[-1500],time[-1])
+#plt.savefig('output_plots/xi_zoom.pdf',bbox_inches='tight')
 
-torque_g=torque_gas(1,M_ratio)/torque_0(M_ratio)
+acf,tau = autocorrelation(torque_normalized[time>t_stat,size_bin])
 
-for i in range(N_bins):
-
-    size = bins[i]
-    torque_samples = torque_factor_density(size) * (force[time>t_stat,i]/avg_counts[i]) / torque_0(M_ratio)
-    avg_torque[i], sigma_torque[i], err_torque[i] = fit_gaussian(torque_samples)
-
-plt.figure()
-plt.errorbar(bins, avg_torque, yerr=3*err_torque, color='darkgreen',fmt='o',label='$<\Gamma_d>$')
-plt.axhline(y=0, color='k', linewidth=1)
-plt.axhline(y=-torque_g, color='darkred', linestyle='--',linewidth=1,label='$-\Gamma_g$')
-plt.xscale('log')
-plt.legend()
+plt.figure(figsize=(6,4))
+plt.plot(time[0:3000],acf[0:3000], markerfacecolor='white')
+plt.axvline(tau*Deltat, color='darkgreen', linestyle='--')
+plt.text(tau*Deltat*1.2, 0.5, r"$t_{\ast} = $ "+f'{tau*Deltat:.3f}', color='darkgreen', verticalalignment='center')
+plt.axhline(y=0, color='k', linewidth=0.5)
 plt.grid(which='both')
-plt.xlabel('Dust size [cm]')
-plt.ylabel(r'Dust torque $<\Gamma_d>$ [$\Gamma_\ast$]')
+plt.xlim(time[1],time[3000])
+plt.xscale('log')
+plt.xlabel('time lag $ t\' \ [2\pi / \Omega_p]$')
+plt.ylabel('torque normalized autocorrelation $\\hat{\\eta} ( t \' ) $')
+#plt.savefig('output_plots/autocorrelation_time.pdf',bbox_inches='tight')
 
-print(time[-1])
+#%% gaussian distribution and error convergence
+
+size_bin = 2
+tstat = 200
+nslices = 400
+
+plt.figure(figsize=(6,4))
+counts, bins, _ = plt.hist(torque_normalized[time>t_stat,size_bin], bins='auto', density=True, alpha=0.6, color='limegreen', label = r'$\tilde{\xi} \ $ counts')
+
+avg, sigma, err = stats(torque_normalized[time>t_stat,size_bin])
+
+bin_centers = 0.5 * (bins[1:] + bins[:-1])
+pdf = norm.pdf(bin_centers, avg, sigma)
+
+# Plot the fitted Gaussian
+plt.plot(bin_centers, pdf, 'darkgreen', linestyle='--', label=f'Gaussian fit')
+# plt.text(avg + 4*sigma, 0.5*max(pdf), r'std $( \ \tilde{\xi} \ ) =$'+f'${sigma:.2e}$',horizontalalignment='right')
+# plt.text(avg + 4*sigma, 0.6*max(pdf), r'$\langle \ \tilde{\xi} \ \rangle=$'+f'${avg:.2e}$',horizontalalignment='right')
+# plt.text(avg + 4*sigma, 0.4*max(pdf), r'$\delta \xi \ =$'+f'${3*err:.2e}$',horizontalalignment='right')
+plt.axvline(x=0, color='k', linewidth=0.5)
+plt.fill_betweenx([0, max(pdf)], avg - err, avg + err, color= 'pink', label=r'$ \left\langle \tilde{\xi} \right\rangle \pm \delta \xi $')
+plt.plot([avg, avg], [0, norm.pdf(avg, avg, sigma)], color= 'firebrick',linestyle='-',label=r'$\left\langle \tilde{\xi} \right\rangle$')
+plt.legend()
+plt.xlabel(r"particle-averaged normalized torque $\tilde{\xi}$")
+plt.ylabel("distribution density")
+plt.grid()
+plt.savefig('output_plots/gaussian_distribution.pdf',bbox_inches='tight')
+
+print(f"Average: {avg:.3e} +/- {err:.3e}")
+print(f"STD: {sigma:.3e}")
+
+NDt = np.zeros(nslices)
+torqueavg = np.zeros(nslices)
+torquestd = np.zeros(nslices)
+torqueerr = np.zeros(nslices)
+tsamples = np.zeros(nslices)
+
+for i in range(nslices):
+
+    tend= (time[-1]-tstat)*(i+1)/(nslices) + tstat
+    #tstart= (time[-1]-tstat)*(i)/(nslices) + tstat
+
+    time_filter = (time >= tstat) & (time < tend)
+
+    # _,n_acf = autocorrelation(torque_normalized[time_filter,size_bin])
+    # N_samples = len(torque_normalized[time_filter,size_bin])
+    # N_effective = N_samples / (2*n_acf +1)
+
+    # torqueavg[i] = np.mean(torque_normalized[time_filter,size_bin])
+    # torquestd[i] = np.std(torque_normalized[time_filter,size_bin])
+    # torqueerr[i] = 3*torquestd[i]/np.sqrt(N_effective)
+    torqueavg[i], torquestd[i], torqueerr[i] = stats(torque_normalized[time_filter,size_bin])
+    NDt[i] = len(torque_normalized[time_filter,size_bin])
+    tsamples [i] = tend
+
+plt.figure(figsize=(8,4))
+plt.fill_between(tsamples, torqueavg - torqueerr, torqueavg + torqueerr, color='pink', label=r'$\left\langle \tilde{\xi} \right\rangle \pm \delta \xi$')
+plt.plot(tsamples,torqueavg, label=r'$\left\langle \tilde{\xi} \right\rangle$')
+plt.axhline(y=0, color='k', linewidth=0.5)
+plt.legend(loc='lower right')
+plt.grid()
+plt.xlabel('time $t \ [2\pi / \\Omega_p]$')
+plt.xlim(tsamples[0],tsamples[-1])
+plt.ylim(-0.02,0.02)
+plt.ylabel(r'time-averaged normalized torque $\left\langle \tilde{\xi}  \right\rangle$')
+#plt.savefig('output_plots/error_convergence.pdf',bbox_inches='tight')
+
 # %%

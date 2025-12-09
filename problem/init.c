@@ -1,7 +1,7 @@
 /* ///////////////////////////////////////////////////////////////////// */
 /*! 
   \file  
-  \brief Disk-Planet interaction problem.
+  \brief Disk-Planet interaction problem, with dust torque
 
 */
 /* ///////////////////////////////////////////////////////////////////// */
@@ -113,6 +113,8 @@ void Analysis (const Data *d, Grid *grid)
   bool size_cond, radius_cond;
   double r_part, phi_part, r_planet, phi_planet, dx, dy, dr2, ds2;
 
+  double AUtom = CONST_au / 100.;
+
   double r_in = grid->xbeg_glob[IDIR]*g_inputParam[DAMPING_INNER];
   double r_out = grid->xend_glob[IDIR]*g_inputParam[DAMPING_OUTER];
   
@@ -144,8 +146,14 @@ void Analysis (const Data *d, Grid *grid)
 
   //potential smoothing length
   if (g_inputParam[DUST_SMOOTHING_FACTOR] > 0){
+
+    //scale height smoothing (size independent)
+    ds2=POW2(r_planet*g_inputParam[ASPECT_RATIO]*g_inputParam[DUST_SMOOTHING_FACTOR]);
+  }
+
+  if  (g_inputParam[DUST_SMOOTHING_FACTOR] == -2){
     //hill radius smoothing
-    ds2=POW2(g_inputParam[DUST_SMOOTHING_FACTOR]*r_planet*pow(g_nb.m[1]/(3*g_nb.m[0]),1/3));
+    ds2=POW2(r_planet*0.6*pow(g_nb.m[1]/(3*g_nb.m[0]),1./3.));
   }
 
   //loop on particles
@@ -168,9 +176,9 @@ void Analysis (const Data *d, Grid *grid)
         // }
 
         // Hd-based smoothing length
-        if (g_inputParam[DUST_SMOOTHING_FACTOR]<0){
-          double H = part->coord[IDIR]*g_inputParam[ASPECT_RATIO];
-          double OmegaK = sqrt(G_MU/part->coord[IDIR])/part->coord[IDIR];
+        if (g_inputParam[DUST_SMOOTHING_FACTOR]==-1){
+          double H = r_planet*g_inputParam[ASPECT_RATIO];
+          double OmegaK = sqrt(G_MU/r_planet)/part->coord[IDIR];
           double Stokes = part->tau_s*OmegaK;
           ds2=POW2(0.7*H)*g_inputParam[ALPHA]/(g_inputParam[ALPHA]+Stokes);
         }
@@ -185,7 +193,7 @@ void Analysis (const Data *d, Grid *grid)
 
         //y force calculation
         dr2 = dx*dx + dy*dy + ds2;
-        local_dust_force[bin] += dy/pow(dr2,1.5);
+        local_dust_force[bin] += r_planet*r_planet*dy/pow(dr2,1.5);
         local_particles[bin]++;
       }
     }
@@ -231,7 +239,7 @@ void Analysis (const Data *d, Grid *grid)
     FILE *fp = fopen(output_file, "a");
     fprintf(fp,"%-15.6e",g_time);
     for(bin = 0; bin < NBIN_DUST; bin++) {
-      fprintf(fp,"% 14.6e",global_dust_force[bin]);
+      fprintf(fp,"% 14.6e",global_dust_force[bin]/global_particles[bin]);
     } 
     for(bin = 0; bin < NBIN_DUST; bin++) {
       fprintf(fp,"%15ld",global_particles[bin]);

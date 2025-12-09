@@ -1,6 +1,11 @@
 0 0.000000e+00 1.000000e-05 0 single_file little rho vx1 vx2 vx3 
-1 1.999998e+02 3.394386e-04 589231 single_file little rho vx1 vx2 vx3 
-2 3.999997e+02 3.394386e-04 1178439 single_file little rho vx1 vx2 vx3 
-3 5.999999e+02 3.394386e-04 1767648 single_file little rho vx1 vx2 vx3 
-4 7.999999e+02 3.394386e-04 2356856 single_file little rho vx1 vx2 vx3 
-5 1.000000e+03 2.433559e-04 2946065 single_file little rho vx1 vx2 vx3 
+1 1.999994e+02 1.253245e-03 159625 single_file little rho vx1 vx2 vx3 
+2 3.999997e+02 1.253245e-03 319211 single_file little rho vx1 vx2 vx3 
+3 5.999988e+02 1.253245e-03 478796 single_file little rho vx1 vx2 vx3 
+4 7.999992e+02 1.253245e-03 638382 single_file little rho vx1 vx2 vx3 
+5 9.999995e+02 1.253245e-03 797968 single_file little rho vx1 vx2 vx3 
+6 1.200000e+03 1.253245e-03 957554 single_file little rho vx1 vx2 vx3 
+7 1.399999e+03 1.253245e-03 1117139 single_file little rho vx1 vx2 vx3 
+8 1.599999e+03 1.253245e-03 1276725 single_file little rho vx1 vx2 vx3 
+9 1.800000e+03 1.253245e-03 1436311 single_file little rho vx1 vx2 vx3 
+10 2.000000e+03 1.253245e-03 1595897 single_file little rho vx1 vx2 vx3 

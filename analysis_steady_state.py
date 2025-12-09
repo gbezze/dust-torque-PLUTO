@@ -270,13 +270,13 @@ print(" b  =  "+str(popt[2]*popt[3]))
 # %% q exponent law plot
 
 plt.figure(figsize=(7,4))
-plt.errorbar(bin_sizes, exps, yerr=3*errs, color='darkgreen',fmt='o', alpha=0.5,label='$q_j$ distribution fit ($\pm$ 3$\sigma$)')
+plt.errorbar(bin_sizes, exps, yerr=3*errs, color='firebrick',fmt='o', label='$q_{  \ j}\ $ slope fit',markerfacecolor='white',linewidth=1.5,markeredgewidth=1.5)
 plt.xscale('log')
-plt.plot(bin_sizes,dust_radial_exponent(bin_sizes,*popt),linewidth=3., label='$q(s)$ empyrical law')
+plt.plot(bin_sizes,dust_radial_exponent(bin_sizes,*popt),linewidth=2.,linestyle='--',color='mediumseagreen', label='$q (s)\ $ empyrical law')
 #plt.plot(bin_sizes,dust_radial_exponent_p(bin_sizes),linewidth=3., label='$q\ (s)$ fit')
 
 plt.xlabel("dust size $s$ [cm]")
-plt.ylabel(r"radial distribution exponent  $q=\frac{d \ \log N_p}{d \ \log r}$")
+plt.ylabel(r"radial distribution exponent  $q=\frac{d \ \log N_P}{d \ \log r}$")
 plt.legend(loc='upper center',fancybox=False,framealpha=1.)
 plt.grid(which='both')
 plt.savefig('output_plots/q_fit.pdf',bbox_inches='tight')
@@ -293,7 +293,7 @@ for i in range(N_bins):
     formatted_size = f"{bin_sizes[j]:.3f}"
     plt.plot(time[::100],counts[::100,j],label=formatted_size,c=cmap(i/N_bins),alpha=1)
 plt.xlabel('time $t$ [$2\pi / \Omega_p$]')
-plt.ylabel('Nuber of particles per size bin $N_p$')
+plt.ylabel('Nuber of particles per size bin $N_P$')
 plt.grid()
 #
 plt.legend(fontsize=12,title='particle size $s$ [cm]',ncols=5, bbox_to_anchor=(0.5, -0.2), loc='upper center', fancybox=False, framealpha=0.)
@@ -345,7 +345,7 @@ def get_stokes(step):
 
     return size_bins, stokes_avg, stokes_err
 
-size, stokes, stokes_err = get_stokes(10)
+size, stokes, stokes_err = get_stokes(2)
 
 plt.figure()
 plt.plot(size,stokes)
@@ -389,7 +389,7 @@ def plot_stokes(step,cmap):
         plt.scatter(stokes_filtered, radius_filtered, s=1,label=f'size {size_bins[i]:.3f} cm', alpha=0.5, c=cmap(i/len(size_bins)))
 
 plt.figure()
-plot_stokes(10,cmap)
+plot_stokes(2,cmap)
 plt.xscale('log')
 plt.grid(which='both')
 plt.xlabel(r'Stokes number $\mathcal{S}$')
