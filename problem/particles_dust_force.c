@@ -237,21 +237,19 @@ void Particles_Dust_ComputeGravity(Particle *p, double *grav_force)
   phi = p->coord[1];
   r3 = POW3(r);
 
-  //potential smoothing length
+  //POTENTIAL SMOOTHING
+  //for consistency keep this part the same as the correspondent in analysis() in "init.c"
   if (g_inputParam[DUST_SMOOTHING_FACTOR] == -2){
     double r_planet = sqrt(g_nb.x[1]*g_nb.x[1]+g_nb.y[1]*g_nb.y[1]);
     //Hill radius
-    ds2=POW2(0.7*r_planet*pow(g_nb.m[1]/(3*g_nb.m[0]),1./3.));
+    ds2=POW2(0.6*r_planet*pow(g_nb.m[1]/(3.*g_nb.m[0]),1./3.));
   }
 
   if (g_inputParam[DUST_SMOOTHING_FACTOR] > 0){
     double r_planet = sqrt(g_nb.x[1]*g_nb.x[1]+g_nb.y[1]*g_nb.y[1]);
-    //Hill radius
-    //ds2=POW2(g_inputParam[DUST_SMOOTHING_FACTOR]*r_planet*pow(g_nb.m[1]/(3*g_nb.m[0]),1./3.));
     //Scale height
     ds2 = POW2(r_planet*g_inputParam[ASPECT_RATIO]*g_inputParam[DUST_SMOOTHING_FACTOR]);
   }
-
 
   if(g_inputParam[DUST_SMOOTHING_FACTOR] == -1){
     //Dust scale height smoothing
@@ -260,6 +258,7 @@ void Particles_Dust_ComputeGravity(Particle *p, double *grav_force)
     double Stokes = p->tau_s*OmegaK;
     ds2=POW2(0.7*H)*g_inputParam[ALPHA]/(g_inputParam[ALPHA]+Stokes);
   }
+
 
   DIM_EXPAND(double x = r * cos(phi);,
              double y = r * sin(phi);,

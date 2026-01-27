@@ -111,7 +111,7 @@ void Analysis (const Data *d, Grid *grid)
 
   int bin;
   bool size_cond, radius_cond;
-  double r_part, phi_part, r_planet, phi_planet, dx, dy, dr2, ds2;
+  double r_part, r_hill, phi_part, r_planet, phi_planet, dx, dy, dr2, ds2;
 
   double AUtom = CONST_au / 100.;
 
@@ -143,23 +143,30 @@ void Analysis (const Data *d, Grid *grid)
   //planet polar coordinates
   phi_planet = atan2(g_nb.y[1],g_nb.x[1]);
   r_planet = sqrt(g_nb.x[1]*g_nb.x[1]+g_nb.y[1]*g_nb.y[1]);
+  r_hill=r_planet*0.6*pow(g_nb.m[1]/(3*g_nb.m[0]),1./3.);
 
-  //potential smoothing length
+  //POTENTIAL SMOOTHING
   if (g_inputParam[DUST_SMOOTHING_FACTOR] > 0){
-
-    //scale height smoothing (size independent)
+    //gas scale height smoothing (size independent)
     ds2=POW2(r_planet*g_inputParam[ASPECT_RATIO]*g_inputParam[DUST_SMOOTHING_FACTOR]);
   }
 
   if  (g_inputParam[DUST_SMOOTHING_FACTOR] == -2){
-    //hill radius smoothing
+    //hill radius smoothing (depends on planet mass)
     ds2=POW2(r_planet*0.6*pow(g_nb.m[1]/(3*g_nb.m[0]),1./3.));
   }
+
+  //printf("ds2: %e\n",ds2);
+  //printf("DUST SMOOTHING FACTOR: %e\n",g_inputParam[DUST_SMOOTHING_FACTOR]);
+
+
+  //dust scale height smoothing is inside particles loop
 
   //loop on particles
   PARTICLES_LOOP(CurNode, d->PHead){
     part = &(CurNode->p);
     r_part=part->radius*UNIT_LENGTH; //particle radius in cm
+
     //loop on particle size
     for (bin = 0; bin < NBIN_DUST; bin++) 
     {
@@ -175,8 +182,8 @@ void Analysis (const Data *d, Grid *grid)
         //   printf("r_part: %6e,  dust_bin: %6e",r_part,dust_size_array[bin]);
         // }
 
-        // Hd-based smoothing length
-        if (g_inputParam[DUST_SMOOTHING_FACTOR]==-1){
+        //Dutst scale height smoothing
+        if (g_inputParam[DUST_SMOOTHING_FACTOR] == -1){
           double H = r_planet*g_inputParam[ASPECT_RATIO];
           double OmegaK = sqrt(G_MU/r_planet)/part->coord[IDIR];
           double Stokes = part->tau_s*OmegaK;
@@ -193,8 +200,11 @@ void Analysis (const Data *d, Grid *grid)
 
         //y force calculation
         dr2 = dx*dx + dy*dy + ds2;
-        local_dust_force[bin] += r_planet*r_planet*dy/pow(dr2,1.5);
-        local_particles[bin]++;
+        if (dr2 > POW2(0.5*r_hill)){
+          //exclude particles closer than half Hill radius
+          local_dust_force[bin] += r_planet*r_planet*dy/pow(dr2,1.5);
+          local_particles[bin]++;
+        }
       }
     }
   }
@@ -211,6 +221,8 @@ void Analysis (const Data *d, Grid *grid)
   //output to file
   if (prank==0){
   
+    //printf("ds2: %e\n",ds2);
+
     char output_file[512];
     sprintf(output_file, "%s/dust_force.dat", RuntimeGet()->output_dir);
 

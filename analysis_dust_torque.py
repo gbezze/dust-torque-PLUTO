@@ -2,18 +2,26 @@
 import numpy as np
 import pyPLUTO.pload as pp 
 import pyPLUTO.Image as img
-import particles_read as pr
+#import particles_read as pr
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import astropy.constants as const
 from scipy.stats import norm
 from scipy.optimize import curve_fit
+from scipy.interpolate import interp2d, interp1d
 from pathlib import Path
 from matplotlib import font_manager as fm, cycler
 import os
+import warnings
+import mpl_scatter_density
+import matplotlib.patches as patches
+
 
 global output_dir
 
-output_dir = r'./problem/out_m3e-6/'
+output_dir = r'./problem/out/'
+
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 def nice_plots():
     
@@ -59,27 +67,111 @@ def nice_plots():
 
     print("EB Garamond configured")
 
+def ReadPartData(ns):
+
+    def NStepStr(ns):
+        nsstr = str(ns)
+        while len(nsstr) < 4:
+            nsstr = '0'+nsstr
+        return nsstr
+    
+    nstepstr = NStepStr(ns)
+    fname = output_dir+"particles."+nstepstr+".partdbl"
+    h_lines = 0 
+    val_dict = {}
+
+    #READ HEADER. 
+    with open(fname, "rb") as f:
+        for line in f:
+            if h_lines < 13:
+                if h_lines > 0 and h_lines < 13:
+                    val_dict.update({line.split()[1].decode('utf8'):[i.decode('utf8') for i in line.split()[2:]]})
+                h_lines += 1
+
+    fdata = open(fname, "rb")
+ 
+    cnt = 0
+    while (cnt < h_lines):
+        fdata.readline()
+        cnt += 1
+        
+    data = fdata.read()
+    fdata.close()
+
+    dt = np.dtype({'names':val_dict['field_names'], 'formats':['('+i+',)<d' for i in val_dict['field_dim']]})
+
+    val = np.frombuffer(data, dtype=dt)
+
+    for i in range(len(val_dict['field_names'])):
+        name = val_dict['field_names'][i]
+        val_dict.update({name:val[name]})
+
+    return val_dict
+
+def get_sym_data(printing = False):
+
+    global M_ratio, sigma0, rid, rod, rb
+
+    planet_data_path = os.path.join(output_dir, 'nbody.out')
+    logfile_path = os.path.join(output_dir, 'pluto.0.log')
+
+    with open(planet_data_path,'r') as f:
+
+        lines = f.readlines()
+        M_ratio = np.array([float(lines[1].split()[2].strip())])
+
+    with open(logfile_path,'r') as f:
+
+        lines = f.readlines()
+        for line in lines:
+            if 'SIGMA_0' in line:
+                sigma0 = float(line.split()[2].strip())
+            if 'DUST_INJECTION_RATIO' in line:
+                rb_ratio = float(line.split()[2].strip())
+            if 'DAMPING_INNER' in line:
+                damping_inner = float(line.split()[2].strip())   
+            if 'DAMPING_OUTER' in line:
+                damping_outer = float(line.split()[2].strip())
+            if 'X1-grid' in line:
+                ri = float(line.split()[3].strip())
+                ro = float(line.split()[6].strip())
+            
+    rid = ri * damping_inner
+    rod = ro * damping_outer
+    rb = rod - (rod-rid)*rb_ratio
+
+    if(printing):
+        print("")
+        print("Simulation parameters:")
+        print(f"Planet-to-star mass ratio: {M_ratio[0]:.2e}")
+        print(f"Gas surface density at 1 AU: {sigma0:.2e} g/cm2")
+        print(f"Dust inner radius: {rid:.2f} AU")
+        print(f"Dust outer radius: {rod:.2f} AU")
+        print(f"Dust injection boundary: {rb:.2f} AU")
+        print("")
+
 def positions(step):
 
     # import dust data
-    P = pr.ReadPartData(step)
+    P = ReadPartData(step)
 
     r_part = np.array(P['x1']).flatten()
     phi_part = np.array(P['x2']).flatten()
     tau_part = np.array(P['tau_s']).flatten()
     size_part = np.array(P['radius']).flatten()
 
-    time = float(P['time'][0])
+    t_part = float(P['time'][0])
 
     #import planet position
-
-    time_index =step*2+10
 
     planet_data_path = os.path.join(output_dir, 'nbody_coordinates.dat')
 
     with open(planet_data_path,'r') as f:
 
         lines = f.readlines()
+        times = np.array([float(line.split()[1]) for line in lines[9:]])
+        time_index = np.argmin(np.abs(times - t_part))
+
         x_planet = float(lines[time_index].split()[2])
         y_planet = float(lines[time_index].split()[3])
         t_planet = float(lines[time_index].split()[1])
@@ -92,35 +184,113 @@ def positions(step):
     size_part = truncate(size_part,7)
     size_bins = np.sort(np.unique(size_part))
 
+    r_planet = np.sqrt(x_planet**2 + y_planet**2)
+    angle_planet = np.arctan2(y_planet,x_planet)
+
+    time_difference = t_part - t_planet
+
+    delta_angle = 2*np.pi * time_difference * np.sqrt(1/(r_planet**3))
+
+    x_planet = r_planet * np.cos(angle_planet + delta_angle)
+    y_planet = r_planet * np.sin(angle_planet + delta_angle)
+
     # calculate individual particle tangential force on planet
 
-    return x_part, y_part, size_part, size_bins , time, x_planet, y_planet, t_planet
+    return x_part, y_part, size_part, size_bins , t_part, x_planet, y_planet, t_planet, P
 
-def dust_plot(step,S):
+def dust_plot(step, S, zoomangle=1., zoomr=1.):
 
-    x, y, size_part, size_bins, time, x_planet, y_planet, t_planet = positions(step)
+    x, y, size_part, size_bins, time, x_planet, y_planet, t_planet, P = positions(step)
     
     r = np.sqrt(y**2+x**2)
     angle = np.arctan2(y,x)
 
     r_planet = np.sqrt(x_planet**2+y_planet**2)
     angle_planet = np.arctan2(y_planet,x_planet)
-    # plt.scatter(angle, radius, s=0.2, c=size_part, cmap='viridis')
-    # plt.scatter(angle_planet, r_planet, s=10, c='black')
 
     angle_relative = angle -angle_planet
     angle_relative[angle_relative>np.pi] -= 2*np.pi
     angle_relative[angle_relative<-np.pi] += 2*np.pi
 
-    plt.figure()
-    size_index = (size_part==size_bins[S])
-    plt.scatter(angle_relative[size_index], r[size_index], s=0.2, c=size_part[size_index], cmap='brg')
-    plt.scatter(0, r_planet, s=10, c='black')
-    plt.xlim(-np.pi,np.pi)
-    plt.ylim(r_planet*0.9,r_planet*1.1)
+    deltar = 0.5/zoomr #normalized to r_p
+    deltaangle = 1/zoomangle #normalzied to pi
 
-    plt.figure()
-    plt.hist(r[size_part==size_part[S]], bins=100)
+    size_index = np.zeros(len(r),dtype=bool)
+
+    try:
+        for i in range(len(S)):
+            size_index[size_part==size_bins[S[i]]] = True
+    except:
+        size_index = (size_part==size_bins[S])
+
+    # plt.scatter(angle_relative[size_index], r[size_index], s=0.2, c=size_part[size_index], cmap='brg',alpha=0.7)
+    plt.scatter(angle_relative[size_index], r[size_index], s=0.2, c='darkred',alpha=1)
+    plt.scatter(0, r_planet, s=10, c='black')
+    plt.xlim(-deltaangle*np.pi,deltaangle*np.pi)
+    plt.ylim(r_planet*(1-deltar),r_planet*(1+deltar))
+    plt.xlabel(r'$\phi - \phi_p$ [rad]')
+    plt.ylabel(r'$r$ [AU]')
+
+    r_h = 0.1 * r_planet * (M_ratio/3)**(1/3)
+
+    theta = np.linspace(0, 2*np.pi, 400)
+    a_hill = (r_h/r_planet) * np.cos(theta)
+    r_hill = r_planet + r_h * np.sin(theta)
+
+    plt.plot(a_hill, r_hill, color='forestgreen', linewidth=1.5)
+    # plt.text(0, r_planet + r_h, r'$r_H$', color='forestgreen', verticalalignment='bottom', horizontalalignment='left')
+
+    # plt.figure()
+    # plt.hist(r[(size_part==size_part[S])], bins=100)
+    # plt.xlabel(r'$r$ [AU]')
+    # plt.ylabel('Particles count')
+    # plt.figure()
+    #plt.hist(angle_relative[(size_part==size_part[S])&(np.abs(angle_relative)<deltaangle*np.pi)&(np.abs(r-r_planet)<deltar*r_planet)], bins=100)
+
+    #return P
+
+def dust_densplot(step, S, zoomangle=1., zoomr=1.,maxcounts=4):
+
+    x, y, size_part, size_bins, time, x_planet, y_planet, t_planet, P = positions(step)
+
+    r = np.sqrt(y**2+x**2)
+    angle = np.arctan2(y,x)
+
+    r_planet = np.sqrt(x_planet**2+y_planet**2)
+    angle_planet = np.arctan2(y_planet,x_planet)
+
+    angle_relative = angle -angle_planet
+    angle_relative[angle_relative>np.pi] -= 2*np.pi
+    angle_relative[angle_relative<-np.pi] += 2*np.pi
+
+    deltar = 0.5/zoomr #normalized to r_p
+    deltaangle = 1/zoomangle #normalzied to pi
+
+    size_index = np.zeros(len(r),dtype=bool)
+
+    try:
+        for i in range(len(S)):
+            size_index[size_part==size_bins[S[i]]] = True
+    except:
+        size_index = (size_part==size_bins[S])
+
+    cmap = plt.get_cmap('magma_r')
+    colors = cmap(np.linspace(0, 1, 100))
+    colors[0] = [1, 1, 1, 1]  # white
+    cmap_white=mcolors.LinearSegmentedColormap.from_list(
+        f"custom_white", colors
+    )
+    
+
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1, projection='scatter_density')
+    norm = mcolors.Normalize(vmin=0, vmax=maxcounts)
+    dust_density=ax.scatter_density(angle_relative[size_index], r[size_index], cmap=cmap_white, norm=norm)
+    plt.scatter(0, r_planet, s=10, c='black')
+    plt.xlim(-deltaangle*np.pi,deltaangle*np.pi)
+    plt.ylim(r_planet*(1-deltar),r_planet*(1+deltar))
+    plt.xlabel(r'$\phi - \phi_p$ [rad]')
+    plt.ylabel(r'$r$ [AU]')
 
 def dust_hist(step,S):
 
@@ -247,7 +417,7 @@ def dust_radial_exponent_p(size):
     u=size/2.827
     return 2.246*np.log10(u**0.627+u**-0.066)
 
-def torque_0(M_ratio):
+def torque_0():
 
     #all in kg m s
 
@@ -259,7 +429,7 @@ def torque_0(M_ratio):
 
     # disk properties
     h=0.05
-    Sigma_0 = 1e4 #[kg/m2]
+    Sigma_0 = sigma0 * 10 #[kg/m2]
 
     torque= M_ratio**2 * rp**4 * Omega_k**2 * Sigma_0 / h**2
 
@@ -273,27 +443,27 @@ def torque_factor_density(size):
 
     q=dust_radial_exponent_p(size)
 
-    rp = 1 * AUtom
-    rid = 0.5 * AUtom * 1.1
-    rod = 1.8 * AUtom * 0.9
-    rb = rod - (rod-rid)*0.1
+    rp_au = 1 * AUtom
+    rid_au = rid * AUtom
+    rod_au = rod * AUtom
+    rb_au = rb * AUtom
 
-    Sigma_gas = 1e4 #[kg / m2]
+    Sigma_gas = sigma0*10 #[kg / m2]
     
     dust_gas_ratio = 0.01
 
-    M_dust = 2 * np.pi * Sigma_gas * dust_gas_ratio * (rb**(q+2) - rid**(q+2)) / ((q+2)*rp**q)
+    M_dust = 2 * np.pi * Sigma_gas * dust_gas_ratio * (rb_au**(q+2) - rid_au**(q+2)) / ((q+2)*rp_au**q)
 
     # PLUTO calculates y/r^3 in units of 1/AU^2 so we need to convert it
     conv_factor=AUtom**2
 
-    torque_factor=G*M_dust*rp*conv_factor
+    torque_factor=G*M_dust*rp_au*conv_factor
     
     return torque_factor
 
-def torque_gas(n,M_ratio):
+def torque_gas(n):
     
-    torque = -(1.364-0.541*n)*torque_0(M_ratio)
+    torque = -(1.364-0.541*n)*torque_0()
 
     return torque
 
@@ -343,15 +513,227 @@ def stats(data):
 
     return avg, sigma, err
 
+def torque_BLP18(stokes):
 
-#%% Plot autocorrelation
+    #data from the table
+    M_ratio_values = np.array([0.333, 0.486, 0.709, 1.03, 1.51, 2.2, 3.22, 4.69, 6.85, 10.0])
+    stokes_values = np.array([0.010, 0.014, 0.021, 0.030, 0.043, 0.062, 0.089, 0.127, 0.183, 0.264, 0.379, 0.546, 0.785, 1.129])
+    torque_values = np.array([
+        [0.283, 0.309, 0.264, 0.201, 0.142, 0.093, 0.056, 0.029, 0.006, -0.010],
+        [0.371, 0.394, 0.415, 0.333, 0.239, 0.160, 0.098, 0.053, 0.017, -0.008],
+        [0.739, 0.720, 0.618, 0.475, 0.382, 0.276, 0.172, 0.095, 0.041, -0.002],
+        [1.638, 1.332, 1.102, 0.851, 0.625, 0.434, 0.275, 0.185, 0.087, 0.021],
+        [3.254, 2.614, 1.961, 1.476, 1.078, 0.757, 0.503, 0.316, 0.174, 0.085],
+        [5.776, 4.579, 3.428, 2.461, 1.790, 1.266, 0.850, 0.546, 0.326, 0.167],
+        [9.672, 7.297, 5.313, 3.760, 2.620, 1.872, 1.301, 0.880, 0.562, 0.304],
+        [13.684, 10.191, 7.337, 5.145, 3.471, 2.374, 1.725, 1.209, 0.805, 0.483],
+        [16.058, 11.276, 7.866, 5.231, 3.178, 1.372, 1.740, 1.493, 1.073, 0.701],
+        [-1.521, -18.135, -8.446, -0.425, 1.971, 1.746, 2.237, 1.823, 1.351, 0.910],
+        [-32.124, -7.348, 2.307, 4.517, 4.752, 3.232, 2.803, 2.108, 1.499, 1.016],
+        [5.523, 8.831, 9.054, 7.882, 5.860, 3.741, 2.716, 1.953, 1.398, 0.986],
+        [10.492, 9.803, 7.187, 5.859, 4.314, 3.278, 2.465, 1.821, 1.326, 0.943],
+        [11.861, 9.572, 7.850, 5.807, 4.538, 3.367, 2.463, 1.799, 1.299, 0.916]])
+
+    #interpolate in log-log space
+    log_M_ratio = np.log10(M_ratio_values)
+    log_stokes = np.log10(stokes_values)
+    interp_func = interp2d(log_M_ratio, log_stokes, torque_values, kind='linear')
+    torque = interp_func(np.log10(M_ratio), np.log10(stokes))
+
+    return torque
+
+def torque_rescale_factor(size, dust_gas_ratio):
+    
+    G = 6.6743e-11 # [m3 / kg s2]
+    AU = 1.496e11 # Astronomical unit in meters
+    M_star = 1.989e30 # Solar mass in kg
+    Sigma_gas = 1e4 #[kg / m2]
+
+    M_planet = M_ratio * M_star
+
+    q=dust_radial_exponent_p(size)
+
+    rp_m = 1 * AU
+    rid_m = rid * AU
+    rod_m = rod * AU
+    rb_m = rb * AU
+
+    M_dust = 2 * np.pi * Sigma_gas * dust_gas_ratio * (rb_m**(q+1) - rid_m**(q+1)) / ((q+1)* (rp_m**(q-1)))
+
+    torque_rescale_factor = G * M_dust * M_planet /rp_m
+
+    return torque_rescale_factor
+
+def get_stokes(step=1):
+
+    AU = 1.496e11 # Astronomical unit in meters
+    MSUN = 1.98e30 # Solar mass in kg
+    YEAR = 3.1557e7 # Year in seconds
+
+    rp=1 * AU
+    M_star= 1 * MSUN
+    t_sim = 1 * YEAR 
+
+    delta_r= 2*1.01 * rp * np.sqrt(M_ratio/0.05) # corotation zone
+    
+    G = 6.6743e-11 # in kms units
+
+
+
+    x, y, size_part, size_bins, time, x_planet, y_planet, t_planet, tau_part = positions (step)
+    r=np.sqrt(x**2+y**2) * AU
+    tau_part = np.array(tau_part['tau_s']) * YEAR  # Replace 'tau_s' with the correct key if needed
+
+    OmegaK=np.sqrt(G*M_star/(rp**3))
+
+    stokes_part = tau_part*OmegaK
+
+    r_filter = (r>rp-delta_r) & (r<rp+delta_r)
+
+    stokes_avg = np.zeros(len(size_bins))
+    stokes_err = np.zeros(len(size_bins))
+
+    for i in range(len(size_bins)):
+
+        size_filter = (size_part == size_bins[i])
+        stokes_filtered = stokes_part[r_filter & size_filter]
+        stokes_avg[i] = np.average(stokes_filtered)
+        #stokes_err[i] = 0.5*(max(stokes_filtered)-min(stokes_filtered))
+        stokes_err[i] = 3*np.std(stokes_filtered-stokes_avg[i])
+
+    size_bins = size_bins * AU *100
+
+    return size_bins, stokes_avg, stokes_err
+
+def plot_BLP18(size1,size2):
+    
+    #data from the table
+    M_ratio_values = np.array([0.333, 0.486, 0.709, 1.03, 1.51, 2.2, 3.22, 4.69, 6.85, 10.0])*3e-6
+    stokes_values = np.array([0.010, 0.014, 0.021, 0.030, 0.043, 0.062, 0.089, 0.127, 0.183, 0.264, 0.379, 0.546, 0.785, 1.129])
+    torque_values = np.array([
+        [0.283, 0.309, 0.264, 0.201, 0.142, 0.093, 0.056, 0.029, 0.006, -0.010],
+        [0.371, 0.394, 0.415, 0.333, 0.239, 0.160, 0.098, 0.053, 0.017, -0.008],
+        [0.739, 0.720, 0.618, 0.475, 0.382, 0.276, 0.172, 0.095, 0.041, -0.002],
+        [1.638, 1.332, 1.102, 0.851, 0.625, 0.434, 0.275, 0.185, 0.087, 0.021],
+        [3.254, 2.614, 1.961, 1.476, 1.078, 0.757, 0.503, 0.316, 0.174, 0.085],
+        [5.776, 4.579, 3.428, 2.461, 1.790, 1.266, 0.850, 0.546, 0.326, 0.167],
+        [9.672, 7.297, 5.313, 3.760, 2.620, 1.872, 1.301, 0.880, 0.562, 0.304],
+        [13.684, 10.191, 7.337, 5.145, 3.471, 2.374, 1.725, 1.209, 0.805, 0.483],
+        [16.058, 11.276, 7.866, 5.231, 3.178, 1.372, 1.740, 1.493, 1.073, 0.701],
+        [-1.521, -18.135, -8.446, -0.425, 1.971, 1.746, 2.237, 1.823, 1.351, 0.910],
+        [-32.124, -7.348, 2.307, 4.517, 4.752, 3.232, 2.803, 2.108, 1.499, 1.016],
+        [5.523, 8.831, 9.054, 7.882, 5.860, 3.741, 2.716, 1.953, 1.398, 0.986],
+        [10.492, 9.803, 7.187, 5.859, 4.314, 3.278, 2.465, 1.821, 1.326, 0.943],
+        [11.861, 9.572, 7.850, 5.807, 4.538, 3.367, 2.463, 1.799, 1.299, 0.916]])
+
+    #interpolate in log-log space
+    log_M_ratios = np.log10(M_ratio_values)
+    log_stokes = np.log10(stokes_values)
+
+    size_bins, stokes_avg, stokes_err = get_stokes()
+    interp_size=interp1d(size_bins, stokes_avg, kind='linear', fill_value='extrapolate')
+    interp_stokes=interp1d(stokes_avg, size_bins, kind='linear', fill_value='extrapolate')
+    interp_stokes_plus=interp1d(stokes_avg+stokes_err, size_bins, kind='linear', fill_value='extrapolate')
+    interp_stokes_minus=interp1d(stokes_avg-stokes_err, size_bins, kind='linear', fill_value='extrapolate')
+    stokes1=interp_size(size1)
+    stokes2=interp_size(size2)
+
+    stokes_included = stokes_values[(stokes_values > stokes1) & (stokes_values <stokes2)]
+    
+    interp_torques = interp2d(log_M_ratios, log_stokes, torque_values, kind='linear')
+    torques = interp_torques(np.log10(M_ratio), np.log10(stokes_included))
+    sizes_effective = interp_stokes(stokes_included)
+    sizes_effective_plus = interp_stokes_plus(stokes_included)
+    sizes_effective_minus = interp_stokes_minus(stokes_included)
+
+    
+    plt.plot(sizes_effective, torques.flatten(), '-.', label='BLP18', color='forestgreen',alpha=1)
+    plt.fill_betweenx(torques.flatten(), sizes_effective_minus, sizes_effective_plus, color='forestgreen', alpha=0.3)
+
+nice_plots()
+
+def stokes_ticks(ax):
+
+    sizes, stokes, stokes_err = get_stokes(1)
+
+    def size_to_stokes(size):
+        return np.interp(size, sizes, stokes)
+
+    def stokes_to_size(stoke):
+        return np.interp(stoke, stokes, sizes)
+
+    secax = ax.secondary_xaxis(
+        'top',
+        functions=(size_to_stokes, stokes_to_size)
+    )
+
+    secax.tick_params(axis='x', pad=0)
+
+    def hide_first_n_labels(ax, n=1, axis='x', color='white', pad=0.001):
+        """
+        Hide the first n tick labels on a given axis by drawing white boxes over them.
+
+        Parameters:
+            ax      : matplotlib.axes.Axes object (primary or secondary)
+            n       : number of first labels to hide
+            axis    : 'x' or 'y'
+            color   : color of the box (usually same as background)
+            pad     : padding around the label (optional, in figure coordinates)
+        """
+        # Force draw to get the label positions
+        ax.figure.canvas.draw()
+        if axis.lower() == 'x':
+            labels = ax.get_xticklabels()
+        elif axis.lower() == 'y':
+            labels = ax.get_yticklabels()
+        else:
+            raise ValueError("axis must be 'x' or 'y'")
+
+        # Draw white rectangles over the first n labels
+        renderer = ax.figure.canvas.get_renderer()
+        for label in labels[:n]:
+            bbox = label.get_window_extent(renderer=renderer)
+            bbox_fig = bbox.transformed(ax.figure.transFigure.inverted())
+            rect = patches.FancyBboxPatch(
+                (bbox_fig.x0 - pad, bbox_fig.y0 - pad),
+                bbox_fig.width + 2*pad,
+                bbox_fig.height + 2*pad,
+                boxstyle="square,pad=0",
+                transform=ax.figure.transFigure,
+                color=color,
+                zorder=5
+            )
+            ax.figure.patches.append(rect)
+
+    hide_first_n_labels(secax)
+
+    secax.set_xlabel(r'particle Stokes number $\mathcal{S}$',labelpad=5)
+
+
+
+
+
+# %% dust scatter plot
+output_dir = r'./problem/out_C4/'
+
+get_sym_data()
+# 
+
+#plt.figure(figsize=(4,4))
+#dust_plot(1,range(10,15),zoomangle=100.,zoomr=50)
+# plt.figure(figsize=(4,4))
+
+dust_densplot(1,range(15,20),zoomangle=2.,zoomr=2,maxcounts=5)
+# dr_corot = 1.05*np.sqrt(M_ratio/0.05)
+# plt.axhline(y=1-dr_corot, color = 'darkgreen', linestyle = '--')
+# plt.axhline(y=1+dr_corot, color = 'darkgreen', linestyle = '--')
+
+# %% Plot autocorrelation
 
 nice_plots()
 
 t_stat = 200
-size_bin = 2
-
-M_ratio = 3e-6
+size_bin = 27
 
 time, torque_normalized, counts, N_bins, bins = read_force()
 
@@ -379,15 +761,15 @@ plt.axhline(y=0, color='k', linewidth=0.5)
 plt.grid(which='both')
 plt.xlim(time[1],time[3000])
 plt.xscale('log')
-plt.xlabel('time lag $ t\' \ [2\pi / \Omega_p]$')
-plt.ylabel('torque normalized autocorrelation $\\hat{\\eta} ( t \' ) $')
+plt.xlabel('time lag $ k\Delta t \ [2\pi / \Omega_p]$')
+plt.ylabel('torque autocorrelation $\\eta\ ( k )$')
 #plt.savefig('output_plots/autocorrelation_time.pdf',bbox_inches='tight')
 
-#%% gaussian distribution and error convergence
+# %% gaussian distribution and error convergence
 
-size_bin = 2
-tstat = 200
-nslices = 400
+size_bin = 28
+t_stat = 200
+nslices = 100
 
 plt.figure(figsize=(6,4))
 counts, bins, _ = plt.hist(torque_normalized[time>t_stat,size_bin], bins='auto', density=True, alpha=0.6, color='limegreen', label = r'$\tilde{\xi} \ $ counts')
@@ -409,7 +791,7 @@ plt.legend()
 plt.xlabel(r"particle-averaged normalized torque $\tilde{\xi}$")
 plt.ylabel("distribution density")
 plt.grid()
-plt.savefig('output_plots/gaussian_distribution.pdf',bbox_inches='tight')
+#plt.savefig('output_plots/gaussian_distribution.pdf',bbox_inches='tight')
 
 print(f"Average: {avg:.3e} +/- {err:.3e}")
 print(f"STD: {sigma:.3e}")
@@ -422,23 +804,16 @@ tsamples = np.zeros(nslices)
 
 for i in range(nslices):
 
-    tend= (time[-1]-tstat)*(i+1)/(nslices) + tstat
+    tend= (time[-1]-t_stat)*(i+1)/(nslices) + t_stat
     #tstart= (time[-1]-tstat)*(i)/(nslices) + tstat
 
-    time_filter = (time >= tstat) & (time < tend)
+    time_filter = (time >= t_stat) & (time < tend)
 
-    # _,n_acf = autocorrelation(torque_normalized[time_filter,size_bin])
-    # N_samples = len(torque_normalized[time_filter,size_bin])
-    # N_effective = N_samples / (2*n_acf +1)
-
-    # torqueavg[i] = np.mean(torque_normalized[time_filter,size_bin])
-    # torquestd[i] = np.std(torque_normalized[time_filter,size_bin])
-    # torqueerr[i] = 3*torquestd[i]/np.sqrt(N_effective)
     torqueavg[i], torquestd[i], torqueerr[i] = stats(torque_normalized[time_filter,size_bin])
     NDt[i] = len(torque_normalized[time_filter,size_bin])
     tsamples [i] = tend
 
-plt.figure(figsize=(8,4))
+plt.figure(figsize=(8,3))
 plt.fill_between(tsamples, torqueavg - torqueerr, torqueavg + torqueerr, color='pink', label=r'$\left\langle \tilde{\xi} \right\rangle \pm \delta \xi$')
 plt.plot(tsamples,torqueavg, label=r'$\left\langle \tilde{\xi} \right\rangle$')
 plt.axhline(y=0, color='k', linewidth=0.5)
@@ -446,8 +821,55 @@ plt.legend(loc='lower right')
 plt.grid()
 plt.xlabel('time $t \ [2\pi / \\Omega_p]$')
 plt.xlim(tsamples[0],tsamples[-1])
-plt.ylim(-0.02,0.02)
-plt.ylabel(r'time-averaged normalized torque $\left\langle \tilde{\xi}  \right\rangle$')
-#plt.savefig('output_plots/error_convergence.pdf',bbox_inches='tight')
+#plt.ylim(-0.015,0.015)
+plt.ylabel('time-average of\n'+r'normalized torque $\left\langle \tilde{\xi}  \right\rangle$')
+plt.savefig('output_plots/error_convergence.pdf',bbox_inches='tight')
 
+# %% Dust torque plot
+
+output_dir = r'./problem/out/'
+
+get_sym_data(printing=True)
+
+time, torque_normalized, counts, N_bins, bins = read_force()
+
+print(time[-1])
+
+tstat = 100
+
+torque_g = torque_gas(-0.5)
+
+dust_gas_ratio = 0.01
+
+torque_d=np.zeros(N_bins)
+torque_d_err=np.zeros(N_bins)
+
+for i in range(N_bins):
+
+    torque_factor=torque_rescale_factor(bins[i],dust_gas_ratio)
+    xi_avg, xi_sigma, xi_err = stats(torque_normalized[time>tstat,i]*torque_factor)
+    torque_d[i]= xi_avg
+    torque_d_err[i] = xi_err
+
+fig,ax=plt.subplots(1,1,figsize=(6,4))
+plot_BLP18(0.02,21)
+
+#plt.errorbar(bins, torque_d/torque_0(), yerr=torque_d_err/torque_0(), fmt='o', label='Simulation', color='forestgreen',markerfacecolor='white',linewidth=1.5,markeredgewidth=1.5)
+plt.plot(bins, torque_d/torque_0(), '.-', label='simulation', color='steelblue',markerfacecolor='steelblue',linewidth=1.5,markeredgewidth=1.5)
+plt.fill_between(bins, (torque_d - torque_d_err)/torque_0(), (torque_d + torque_d_err)/torque_0(), color='lightblue', alpha=1)
+
+
+plt.axhline(y=-torque_g/torque_0(), color='firebrick', linestyle='--')
+plt.text(bins[0]*1.1, -torque_g/torque_0()*0.9, '$\Gamma_d+\Gamma_g=0$', color='firebrick', verticalalignment='top')
+plt.axhline(y=0, color='k', linewidth=0.5)
+plt.xscale('log')
+plt.grid(which='both')
+plt.xlabel('particle size $s$ [cm]')
+plt.ylabel('Dust torque $\\Gamma_d/\\Gamma_\\ast$')
+plt.xlim(bins[0]*0.9,bins[-1]*1.1)
+ax.set_yscale('symlog', linthresh=1)
+ax.set_yticks([-1,-0.5,0,0.5,1,2,5,10,20,50])
+ax.set_yticklabels(['-1','-0.5','0','0.5','1','2','5','10','20','50'])
+
+plt.legend(loc='upper left')
 # %%

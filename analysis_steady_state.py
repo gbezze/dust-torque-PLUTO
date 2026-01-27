@@ -8,11 +8,14 @@ from scipy.stats import norm
 from scipy.optimize import curve_fit
 from pathlib import Path
 from matplotlib import font_manager as fm, cycler
+from math import erf
+import matplotlib.patches as patches
+
 import os
 
 global output_dir
 
-output_dir = r'./problem/out_stat/'
+output_dir = r'./problem/out/'
 
 def ReadPartData(ns):
 
@@ -227,6 +230,134 @@ def radial_distribution(S,step_start,step_end, plotting=True):
     
     return exponent, exp_err
 
+def plot_stokes(step,cmap):
+
+    AU = 1.496e11 # Astronomical unit in meters
+    MSUN = 1.98e30 # Solar mass in kg
+    YEAR = 3.1557e7 # Year in seconds
+
+    rp=1 * AU
+    M_star= 1 * MSUN
+    t_sim = 1 * YEAR
+
+    delta_r= 1 * AU
+    
+    G = 6.6743e-11 # in kms units
+
+    x, y, size_part, size_bins, time, x_planet, y_planet, t_planet, tau_part = positions (step)
+    r=np.sqrt(x**2+y**2) * AU
+    tau_part = tau_part * YEAR
+
+    OmegaK=np.sqrt(G*M_star/(rp**3))
+    Omega_part = np.sqrt(G*M_star/(r**3))
+    
+    stokes_part = tau_part*Omega_part
+
+    r_filter = (r>rp-delta_r) & (r<rp+delta_r)
+
+    for i in range(len(size_bins)):
+
+        size_filter = (size_part == size_bins[i])
+        stokes_filtered = stokes_part[r_filter & size_filter]
+        radius_filtered = r[r_filter & size_filter]/AU
+        plt.scatter(stokes_filtered, radius_filtered, s=1,label=f'size {size_bins[i]:.3f} cm', alpha=0.5, c=cmap(i/len(size_bins)))
+
+def get_stokes(step):
+
+    AU = 1.496e11 # Astronomical unit in meters
+    MSUN = 1.98e30 # Solar mass in kg
+    YEAR = 3.1557e7 # Year in seconds
+
+    rp=1 * AU
+    M_star= 1 * MSUN
+    t_sim = 1 * YEAR
+
+    delta_r= 0.01 * AU
+    
+    G = 6.6743e-11 # in kms units
+
+    x, y, size_part, size_bins, time, x_planet, y_planet, t_planet, tau_part = positions (step)
+    r=np.sqrt(x**2+y**2) * AU
+    tau_part = tau_part * YEAR
+
+    OmegaK=np.sqrt(G*M_star/(rp**3))
+
+    stokes_part = tau_part*OmegaK
+
+    r_filter = (r>rp-delta_r) & (r<rp+delta_r)
+
+    stokes_avg = np.zeros(len(size_bins))
+    stokes_err = np.zeros(len(size_bins))
+
+    for i in range(len(size_bins)):
+
+        size_filter = (size_part == size_bins[i])
+        stokes_filtered = stokes_part[r_filter & size_filter]
+        stokes_avg[i] = np.average(stokes_filtered)
+        stokes_err = 0.5*(max(stokes_filtered)-min(stokes_filtered))
+
+    size_bins = size_bins * AU *100
+
+    return size_bins, stokes_avg, stokes_err
+
+def stokes_ticks(ax):
+
+    sizes, stokes, stokes_err = get_stokes(1)
+
+    def size_to_stokes(size):
+        return np.interp(size, sizes, stokes)
+
+    def stokes_to_size(stoke):
+        return np.interp(stoke, stokes, sizes)
+
+    secax = ax.secondary_xaxis(
+        'top',
+        functions=(size_to_stokes, stokes_to_size)
+    )
+
+    secax.tick_params(axis='x', pad=0)
+
+    def hide_first_n_labels(ax, n=1, axis='x', color='white', pad=0.001):
+        """
+        Hide the first n tick labels on a given axis by drawing white boxes over them.
+
+        Parameters:
+            ax      : matplotlib.axes.Axes object (primary or secondary)
+            n       : number of first labels to hide
+            axis    : 'x' or 'y'
+            color   : color of the box (usually same as background)
+            pad     : padding around the label (optional, in figure coordinates)
+        """
+        # Force draw to get the label positions
+        ax.figure.canvas.draw()
+        if axis.lower() == 'x':
+            labels = ax.get_xticklabels()
+        elif axis.lower() == 'y':
+            labels = ax.get_yticklabels()
+        else:
+            raise ValueError("axis must be 'x' or 'y'")
+
+        # Draw white rectangles over the first n labels
+        renderer = ax.figure.canvas.get_renderer()
+        for label in labels[:n]:
+            bbox = label.get_window_extent(renderer=renderer)
+            bbox_fig = bbox.transformed(ax.figure.transFigure.inverted())
+            rect = patches.FancyBboxPatch(
+                (bbox_fig.x0 - pad, bbox_fig.y0 - pad),
+                bbox_fig.width + 2*pad,
+                bbox_fig.height + 2*pad,
+                boxstyle="square,pad=0",
+                transform=ax.figure.transFigure,
+                color=color,
+                zorder=5
+            )
+            ax.figure.patches.append(rect)
+
+    hide_first_n_labels(secax)
+
+    secax.set_xlabel(r'particle Stokes number $\mathcal{S}$',labelpad=5)
+
+
 #%% q_slope calculation
 
 cmap=nice_plots()
@@ -279,10 +410,15 @@ plt.xlabel("dust size $s$ [cm]")
 plt.ylabel(r"radial distribution exponent  $q=\frac{d \ \log N_P}{d \ \log r}$")
 plt.legend(loc='upper center',fancybox=False,framealpha=1.)
 plt.grid(which='both')
-plt.savefig('output_plots/q_fit.pdf',bbox_inches='tight')
+#plt.savefig('output_plots/q_fit.pdf',bbox_inches='tight')
 
 
 # %% particle counts
+
+output_dir = r'./problem/out_stat'
+
+time, force, counts, N_bins, bin_sizes = read_force()
+
 
 cmap=nice_plots()
 
@@ -293,57 +429,18 @@ for i in range(N_bins):
     formatted_size = f"{bin_sizes[j]:.3f}"
     plt.plot(time[::100],counts[::100,j],label=formatted_size,c=cmap(i/N_bins),alpha=1)
 plt.xlabel('time $t$ [$2\pi / \Omega_p$]')
-plt.ylabel('Nuber of particles per size bin $N_P$')
+plt.ylabel('nuber of particles per size bin $N_P$')
 plt.grid()
 #
 plt.legend(fontsize=12,title='particle size $s$ [cm]',ncols=5, bbox_to_anchor=(0.5, -0.2), loc='upper center', fancybox=False, framealpha=0.)
 
-plt.savefig('output_plots/particle_counts.pdf',bbox_inches='tight')
+#plt.savefig('output_plots/particle_counts.pdf',bbox_inches='tight')
 
 # %% Stokes Number
 
-output_dir = r'./problem/out/'
+output_dir = r'./problem/out_stat/'
 
 cmap=nice_plots()
-
-def get_stokes(step):
-
-    
-    AU = 1.496e11 # Astronomical unit in meters
-    MSUN = 1.98e30 # Solar mass in kg
-    YEAR = 3.1557e7 # Year in seconds
-
-    rp=1 * AU
-    M_star= 1 * MSUN
-    t_sim = 1 * YEAR
-
-    delta_r= 0.01 * AU
-    
-    G = 6.6743e-11 # in kms units
-
-    x, y, size_part, size_bins, time, x_planet, y_planet, t_planet, tau_part = positions (step)
-    r=np.sqrt(x**2+y**2) * AU
-    tau_part = tau_part * YEAR
-
-    OmegaK=np.sqrt(G*M_star/(rp**3))
-
-    stokes_part = tau_part*OmegaK
-
-    r_filter = (r>rp-delta_r) & (r<rp+delta_r)
-
-    stokes_avg = np.zeros(len(size_bins))
-    stokes_err = np.zeros(len(size_bins))
-
-    for i in range(len(size_bins)):
-
-        size_filter = (size_part == size_bins[i])
-        stokes_filtered = stokes_part[r_filter & size_filter]
-        stokes_avg[i] = np.average(stokes_filtered)
-        stokes_err = 0.5*(max(stokes_filtered)-min(stokes_filtered))
-
-    size_bins = size_bins * AU *100
-
-    return size_bins, stokes_avg, stokes_err
 
 size, stokes, stokes_err = get_stokes(2)
 
@@ -355,43 +452,88 @@ plt.yscale('log')
 plt.xlabel('Particle size [cm]')
 plt.ylabel(r'Stokes number $\mathcal{S}$')
 
-def plot_stokes(step,cmap):
-
-    
-    AU = 1.496e11 # Astronomical unit in meters
-    MSUN = 1.98e30 # Solar mass in kg
-    YEAR = 3.1557e7 # Year in seconds
-
-    rp=1 * AU
-    M_star= 1 * MSUN
-    t_sim = 1 * YEAR
-
-    delta_r= 1 * AU
-    
-    G = 6.6743e-11 # in kms units
-
-    x, y, size_part, size_bins, time, x_planet, y_planet, t_planet, tau_part = positions (step)
-    r=np.sqrt(x**2+y**2) * AU
-    tau_part = tau_part * YEAR
-
-    OmegaK=np.sqrt(G*M_star/(rp**3))
-    Omega_part = np.sqrt(G*M_star/(r**3))
-    
-    stokes_part = tau_part*Omega_part
-
-    r_filter = (r>rp-delta_r) & (r<rp+delta_r)
-
-    for i in range(len(size_bins)):
-
-        size_filter = (size_part == size_bins[i])
-        stokes_filtered = stokes_part[r_filter & size_filter]
-        radius_filtered = r[r_filter & size_filter]/AU
-        plt.scatter(stokes_filtered, radius_filtered, s=1,label=f'size {size_bins[i]:.3f} cm', alpha=0.5, c=cmap(i/len(size_bins)))
-
 plt.figure()
 plot_stokes(2,cmap)
 plt.xscale('log')
 plt.grid(which='both')
 plt.xlabel(r'Stokes number $\mathcal{S}$')
 plt.ylabel('Radial position [AU]')
+
+# %% Deletion probability
+
+def dust_deletion_probability(dist, stokes, M_ratio):
+    
+    H = 0.05
+    r_H = (M_ratio/3)**(1/3)
+    alpha = 3e-3
+    Hd = H*np.sqrt(alpha/(alpha+stokes))
+    prob = np.zeros(len(dist))
+    for i in range(len(dist)):
+        prob[i] = erf(np.sqrt((r_H**2-dist[i]**2)/(2*Hd**2)))
+
+    return prob
+
+dist = np.linspace(0,0.05,600)
+stokes_vals = [1e-4, 1e-2, 0.1]
+
+linestyles = ['--','-.','-']
+
+plt.figure(figsize=(6,4))
+
+
+for i in range(len(stokes_vals)):
+
+    prob = dust_deletion_probability(dist,stokes_vals[i],3e-5)
+    plt.plot(dist/0.05,prob, linestyle = linestyles[i], color = 'firebrick')
+    prob = dust_deletion_probability(dist,stokes_vals[i],1e-6)
+    plt.plot(dist/0.05,prob, linestyle = linestyles[i], color = 'forestgreen')
+
+plt.plot(1,1,linestyle='-',color='k',label=r'$\mathcal{S}=10^{-1}$')
+plt.plot(1,1,linestyle='-.',color='k',label=r'$\mathcal{S}=10^{-2}$')
+plt.plot(1,1,linestyle='--',color='k',label=r'$\mathcal{S}=10^{-4}$')
+plt.plot(1,1,linestyle='-',color='firebrick',label=r'$M_p/M_\star=3 \cdot 10^{-5}$')
+plt.plot(1,1,linestyle='-',color='forestgreen',label=r'$M_p/M_\star= 10^{-6}$')
+plt.xlim(0,0.5)
+plt.ylim(0,1)
+plt.xlabel(r'$|\vec r - \vec r_p|/H$')
+plt.ylabel(r'$P_{d,r}$')
+plt.legend(loc='upper left',bbox_to_anchor=(1.1,0.9),fancybox=False, framealpha=0.)
+plt.grid()
+
+#plt.savefig('output_plots/deletion_probability.pdf',bbox_inches='tight')
+# %%
+
+H=0.05
+alpha=3e-3
+Mratios = np.array([1e-6,3e-6,1e-5,3e-5])
+Mlabels = [r'$1 \cdot 10^{-6}$',r'$3 \cdot 10^{-6}$',r'$1 \cdot 10^{-5}$',r'$3 \cdot 10^{-5}$']
+
+r_H = (Mratios/3)**(1/3)
+
+Hd =  H*np.sqrt(alpha/(alpha+stokes))
+
+fig, ax = plt.subplots(figsize=(7,4))
+
+plt.plot(size, 0.7*Hd, color='firebrick',linewidth=2,label=r'$0.7\ H_d$')
+plt.axhline(y=0.7*H, color='forestgreen',linestyle='--',label=r'$0.7\ H$')
+
+for i in range(len(Mratios)):
+    plt.axhline(y=0.6*r_H[i], color='midnightblue',linestyle='--',label=r'$0.6\ r_H$')
+    plt.text(0.3,0.6*r_H[i]*1.07,Mlabels[i],color='midnightblue')
+
+plt.annotate('',[0.27,0.018],[0.27,0.0039],arrowprops=dict(arrowstyle='->',color='midnightblue'))
+plt.text(0.24,0.017*1.07,r'$M_p/M_\star$',color='midnightblue')
+
+plt.yscale('log')
+plt.xscale('log')
+plt.xlim(0.2,20)
+plt.grid(which='both')
+plt.xlabel('particle size $s$ [cm]')
+plt.ylabel('smoothing radius $r_s$ [AU]')
+handles, labels = ax.get_legend_handles_labels()
+plt.legend(loc='upper right', handles=handles[:3], labels=labels[:3])
+stokes_ticks(ax)
+plt.savefig('output_plots/smoothing_radius.pdf',bbox_inches='tight')
+
+
 # %%

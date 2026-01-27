@@ -13,14 +13,14 @@ def NStepStr(ns):
     return nsstr
 
 
-def ReadPartData(ns):
+def ReadPartData(ns, output_directory=r'./problem/out/'):
 
     nstepstr = NStepStr(ns)
-    fname = r"./problem/out/particles."+nstepstr+".partdbl"
+    fname = output_directory+"particles."+nstepstr+".partdbl"
     h_lines = 0 
     val_dict = {}
 
-	#READ HEADER. 
+    #READ HEADER. 
     with open(fname, "rb") as f:
         for line in f:
             if h_lines < 13:
