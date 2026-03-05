@@ -56,11 +56,17 @@ double calculate_drag_coefficient(double gas_density, double particle_radius, do
 {
   double nu, Re, CdE, CdS, Cd;
 
+  double linear_drag=1.;
+
   nu = sqrt(8./CONST_PI)*gas_density*c_s*mean_free_path/3.; // gas kinematic viscosity [g/cm/s]
 
   Re = 2.0*particle_radius*gas_density*v_rel_abs/nu;
 
   CdE = 2.0*sqrt(1.+128./9./CONST_PI/POW2(Ma));
+  
+  if (LINEAR_DRAG){
+    return CdE;
+  }
   
   if (Re <= 500.0) {
     CdS = 24.0/Re + 3.6*pow(Re,-0.313);
@@ -229,7 +235,7 @@ void Particles_Dust_ComputeGravity(Particle *p, double *grav_force)
  * TODO: - extend to other geometries
  * *************************************************************************** */
 {
-  double r, r3, theta, phi, ds2;
+  double r, r3, theta, phi, ds2, dist;
   double grav_cart[DIMENSIONS], grav_polar[DIMENSIONS];
   int l;
 
@@ -242,13 +248,13 @@ void Particles_Dust_ComputeGravity(Particle *p, double *grav_force)
   if (g_inputParam[DUST_SMOOTHING_FACTOR] == -2){
     double r_planet = sqrt(g_nb.x[1]*g_nb.x[1]+g_nb.y[1]*g_nb.y[1]);
     //Hill radius
-    ds2=POW2(0.6*r_planet*pow(g_nb.m[1]/(3.*g_nb.m[0]),1./3.));
+    ds2=POW2(r_planet*pow(g_nb.m[1]/(3.*g_nb.m[0]),1./3.));
   }
 
   if (g_inputParam[DUST_SMOOTHING_FACTOR] > 0){
     double r_planet = sqrt(g_nb.x[1]*g_nb.x[1]+g_nb.y[1]*g_nb.y[1]);
     //Scale height
-    ds2 = POW2(r_planet*g_inputParam[ASPECT_RATIO]*g_inputParam[DUST_SMOOTHING_FACTOR]);
+    ds2 = POW2(r_planet*0.7*g_inputParam[ASPECT_RATIO]*g_inputParam[DUST_SMOOTHING_FACTOR]);
   }
 
   if(g_inputParam[DUST_SMOOTHING_FACTOR] == -1){
@@ -277,8 +283,8 @@ void Particles_Dust_ComputeGravity(Particle *p, double *grav_force)
       double dz = z - g_nb.z[l];
     )
 
-    d3 = pow(DIM_EXPAND(dx*dx, +dy*dy, +dz*dz)+ds2,1.5); // smoothing happens here
-    
+    d3 = pow(DIM_EXPAND(dx*dx, +dy*dy, +dz*dz)+ds2,3./2.); // smoothing happens here
+
     DIM_EXPAND(
       grav_cart[0] += -g_nb.m[l]/g_nb.m[0] * G_MU * dx / d3;,
       grav_cart[1] += -g_nb.m[l]/g_nb.m[0] * G_MU * dy / d3;,

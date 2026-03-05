@@ -111,7 +111,7 @@ void Analysis (const Data *d, Grid *grid)
 
   int bin;
   bool size_cond, radius_cond;
-  double r_part, r_hill, phi_part, r_planet, phi_planet, dx, dy, dr2, ds2;
+  double r_part, r_hill, phi_part, r_planet, phi_planet, dx, dy, dr2, ds2, distance, orbital_direction;
 
   double AUtom = CONST_au / 100.;
 
@@ -119,7 +119,7 @@ void Analysis (const Data *d, Grid *grid)
   double r_out = grid->xend_glob[IDIR]*g_inputParam[DAMPING_OUTER];
   
   //cutoff radius (don't include particles in injection zone)
-  double r_cutoff = r_out-(r_out-r_in)*g_inputParam[DUST_INJECTION_RATIO];
+  double r_cutoff = r_out-(r_out-r_in)*0.1;
 
   // WARNING: the variables NBIN_DUST and N_BIN_DUST are very different
   // NBIN_DUST = number of bins ---> user-defined parameter in pluto.ini
@@ -141,9 +141,19 @@ void Analysis (const Data *d, Grid *grid)
   }
   
   //planet polar coordinates
-  phi_planet = atan2(g_nb.y[1],g_nb.x[1]);
-  r_planet = sqrt(g_nb.x[1]*g_nb.x[1]+g_nb.y[1]*g_nb.y[1]);
-  r_hill=r_planet*0.6*pow(g_nb.m[1]/(3*g_nb.m[0]),1./3.);
+  // phi_planet = atan2(g_nb.y[1],g_nb.x[1]);
+  // r_planet = sqrt(g_nb.x[1]*g_nb.x[1]+g_nb.y[1]*g_nb.y[1]);
+  phi_planet = atan2(g_inputParam[Y_PLANET],g_inputParam[X_PLANET]);
+  r_planet = sqrt(POW2(g_inputParam[Y_PLANET])+POW2(g_inputParam[X_PLANET]));  
+  r_hill=r_planet*pow(g_nb.m[1]/(3*g_nb.m[0]),1./3.);
+
+  //check orbital direction
+  if ((g_nb.x[1]*g_nb.vy[1] - g_nb.y[1]*g_nb.vx[1])>0){
+    orbital_direction = 1.; //anti-clockwise
+  }
+  else{
+    orbital_direction = -1.; //clockwise
+  }
 
   //POTENTIAL SMOOTHING
   if (g_inputParam[DUST_SMOOTHING_FACTOR] > 0){
@@ -153,14 +163,22 @@ void Analysis (const Data *d, Grid *grid)
 
   if  (g_inputParam[DUST_SMOOTHING_FACTOR] == -2){
     //hill radius smoothing (depends on planet mass)
-    ds2=POW2(r_planet*0.6*pow(g_nb.m[1]/(3*g_nb.m[0]),1./3.));
+    ds2=POW2(r_planet*pow(g_nb.m[1]/(3*g_nb.m[0]),1./3.));
   }
 
   //printf("ds2: %e\n",ds2);
   //printf("DUST SMOOTHING FACTOR: %e\n",g_inputParam[DUST_SMOOTHING_FACTOR]);
 
-
   //dust scale height smoothing is inside particles loop
+
+  ////PLUTO calculates things in this sequence:
+  //// calculate dust acceleration -> step dust -> step planet -> calculate dust torque
+  ////so we need to consider the planet where it was 1 step ago
+
+  // double OmegaK = sqrt(G_MU/r_planet)/r_planet;
+  // double dphi = g_dt * OmegaK ; // angle spanned in one timestep (divided by 2 for integration scheme?)
+
+  // phi_planet = phi_planet + dphi;
 
   //loop on particles
   PARTICLES_LOOP(CurNode, d->PHead){
@@ -173,7 +191,7 @@ void Analysis (const Data *d, Grid *grid)
       //one bin at a time (with rounding errors)
       size_cond = ( fabs(r_part-dust_size_array[bin]) < 1e-8 * fmax(fabs(r_part),(dust_size_array[bin])) ); 
       
-      //only outisde injection zone (no particle source)
+      //only below injection zone (no dust density source term)
       radius_cond = (part->coord[IDIR]<r_cutoff); 
 
       if (size_cond && radius_cond) 
@@ -194,15 +212,15 @@ void Analysis (const Data *d, Grid *grid)
         r_part = part->coord[IDIR];
         phi_part = part->coord[JDIR];
         
-        //particle cartesian coordinates on rotating planet frame (x radial)
+        //particle cartesian coordinates on rotating planet frame (x radial, y towards planet velocity)
         dx=r_part*cos(phi_part-phi_planet)-r_planet;
-        dy=r_part*sin(phi_part-phi_planet);
+        dy=orbital_direction*r_part*sin(phi_part-phi_planet);
 
-        //y force calculation
-        dr2 = dx*dx + dy*dy + ds2;
-        if (dr2 > POW2(0.5*r_hill)){
-          //exclude particles closer than half Hill radius
-          local_dust_force[bin] += r_planet*r_planet*dy/pow(dr2,1.5);
+        //tangential force calculation
+        distance = sqrt( POW2(dx) + POW2(dy));
+        if (distance > g_inputParam[TORQUE_EXCLUSION_RADIUS]*r_hill){
+          //exclude particles closer than half Hill radius if match to BLP18 is desired
+          local_dust_force[bin] += POW2(r_planet)*dy/pow((POW2(distance)+ds2),3./2.);
           local_particles[bin]++;
         }
       }
@@ -222,6 +240,9 @@ void Analysis (const Data *d, Grid *grid)
   if (prank==0){
   
     //printf("ds2: %e\n",ds2);
+    // printf("saved   x planet: %e\n",g_inputParam[X_PLANET]);
+    // printf("current x planet: %e\n",g_nb.x[1]);
+    // printf("difference: %e\n",g_nb.x[1]-g_inputParam[X_PLANET]);
 
     char output_file[512];
     sprintf(output_file, "%s/dust_force.dat", RuntimeGet()->output_dir);

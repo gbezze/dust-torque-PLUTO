@@ -118,6 +118,8 @@ void Particles_Init(Data *d, Grid *grid)
   double n = -g_inputParam[P_INDEX];
   double cs, temperature, gas_sigma;
 
+  
+
   for (dir = 0; dir < 3; dir++) {
     xbeg[dir] = grid->xbeg_glob[dir];
     xend[dir] = grid->xend_glob[dir];
@@ -125,7 +127,7 @@ void Particles_Init(Data *d, Grid *grid)
   
   outer_radius = xend[IDIR]*g_inputParam[DAMPING_OUTER];
   inner_radius = xbeg[IDIR]*g_inputParam[DAMPING_INNER];
-  injection_boundary = outer_radius-(outer_radius-inner_radius)*g_inputParam[DUST_INJECTION_RATIO];
+  injection_boundary = outer_radius-(outer_radius-inner_radius)*0.1;
 
   for (bin = 0; bin < NBIN_DUST; bin++) {
     particle_count_outer[bin] = 0;
@@ -235,7 +237,7 @@ void Particles_Inject(Data *d, Grid *grid)
   double inner_radius = rbeg*g_inputParam[DAMPING_INNER];
 
   //Dust injection area boundary
-  double injection_boundary = outer_radius - (outer_radius - inner_radius)*g_inputParam[DUST_INJECTION_RATIO];
+  double injection_boundary = outer_radius - (outer_radius - inner_radius)*0.1;
   
   
   double gas_sigma;

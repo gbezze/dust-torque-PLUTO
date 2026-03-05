@@ -51,7 +51,7 @@ void Particles_Check_OuterFlux(Data *d, Grid *grid)
   int bin, il, im, ih;
   double r_out = grid->xend_glob[IDIR]*g_inputParam[DAMPING_OUTER];
   double r_in = grid->xbeg_glob[IDIR]*g_inputParam[DAMPING_INNER];
-  double injection_boundary = r_out - (r_out-r_in) *g_inputParam[DUST_INJECTION_RATIO];
+  double injection_boundary = r_out - (r_out-r_in) *0.1;
   Particle *part;
   particleNode *CurNode;
 

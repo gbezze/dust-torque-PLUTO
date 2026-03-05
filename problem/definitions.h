@@ -7,7 +7,7 @@
 #define  TIME_STEPPING                  RK2
 #define  NTRACER                        0
 #define  USE_CMA                        YES
-#define  USER_DEF_PARAMETERS            15
+#define  USER_DEF_PARAMETERS            18
 
 /* -- dust particles declarations -- */
 #define  PARTICLES                      PARTICLES_DUST
@@ -55,7 +55,10 @@
 #define  DUST_SIZE_MIN                  11
 #define  DUST_SIZE_MAX                  12
 #define  DUST_SMOOTHING_FACTOR          13
-#define  DUST_INJECTION_RATIO           14
+#define  DUST_ACCRETION_TIMESCALE       14
+#define  TORQUE_EXCLUSION_RADIUS        15
+#define  X_PLANET                       16
+#define  Y_PLANET                       17
 
 /* [Beg] user-defined constants (do not change this line) */
 
@@ -64,9 +67,10 @@
 #define  UNIT_LENGTH                    (CONST_au)
 #define  UNIT_DENSITY                   (CONST_Msun/(UNIT_LENGTH*UNIT_LENGTH*UNIT_LENGTH))
 #define  UNIT_VELOCITY                  (sqrt(CONST_G*g_inputParam[M_CO]*CONST_Msun/UNIT_LENGTH)/(2.*CONST_PI))
+#define  SIZE_EXP_BASE                  pow(g_inputParam[DUST_SIZE_MAX]/g_inputParam[DUST_SIZE_MIN],1/(g_inputParam[N_BIN_DUST]-1))
 #define  DEBUG                          NO
 #define  MULTIPLE_LOG_FILES             NO
 #define  CHOMBO_REF_VAR                 RHO
-#define  SIZE_EXP_BASE                  pow(g_inputParam[DUST_SIZE_MAX]/g_inputParam[DUST_SIZE_MIN],1/(g_inputParam[N_BIN_DUST]-1))
+#define  LINEAR_DRAG                    NO // set to YES for using Epstein drag regardless of dust size
 
 /* [End] user-defined constants (do not change this line) */

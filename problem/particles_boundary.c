@@ -183,7 +183,7 @@ void Particles_Boundary(Data *d, Grid *grid)
     }          
   } /* End loop on dimensions */
 
-  // remove particles from Hill radius
+  // PARTICLE REMOVAL
 
   double r_planet = sqrt(g_nb.x[1]*g_nb.x[1]+g_nb.y[1]*g_nb.y[1]);
   double r_hill = r_planet*pow(g_nb.m[1]/(3.*g_nb.m[0]),1./3.);
@@ -198,12 +198,12 @@ void Particles_Boundary(Data *d, Grid *grid)
 
 
   curr = d->PHead;
-      while (curr != NULL) {  /* Do not use macro looping here  */
+      while (curr != NULL) {
         p    = &(curr->p);  
         next = curr->next; 
         //fast exclusion of far away particles
 
-        if ((p->coord[IDIR] < r_planet) && (p->coord[IDIR] > r_planet-r_accretion)){
+        if ((p->coord[IDIR] < r_planet+r_accretion) && (p->coord[IDIR] > r_planet-r_accretion) && (g_inputParam[DUST_ACCRETION_TIMESCALE]>0)){
 
           //distance from planet
           x_particle = p->coord[IDIR]*cos(p->coord[JDIR]);
@@ -217,21 +217,43 @@ void Particles_Boundary(Data *d, Grid *grid)
           if (distance < r_accretion){
 
             //geometrical probability method
+            
+            double rs;
+            double OmegaK = sqrt(G_MU/r_planet)/r_planet;
+
+            // //POTENTIAL SMOOTHING
+            // //for consistency keep this part the same as the correspondent in analysis() in "init.c"
+            // if (g_inputParam[DUST_SMOOTHING_FACTOR] == -2){
+            //   //Hill radius
+            //   rs=r_hill;
+            // }
+
+            // if (g_inputParam[DUST_SMOOTHING_FACTOR] > 0){
+            //   double r_planet = sqrt(g_nb.x[1]*g_nb.x[1]+g_nb.y[1]*g_nb.y[1]);
+            //   //Scale height
+            //   rs = r_planet*g_inputParam[ASPECT_RATIO]*g_inputParam[DUST_SMOOTHING_FACTOR];
+            // }
+
+            // if(g_inputParam[DUST_SMOOTHING_FACTOR] == -1){
+            //   //Dust scale height smoothing
+            //   double H = r_planet*g_inputParam[ASPECT_RATIO];
+            //   double Stokes = p->tau_s*OmegaK;
+            //   rs= 0.7*H*sqrt(g_inputParam[ALPHA]/(g_inputParam[ALPHA]+Stokes));
+            // }
 
             double H = r_planet*g_inputParam[ASPECT_RATIO];
-            double OmegaK = sqrt(G_MU/r_planet)/r_planet;
             double Stokes = p->tau_s*OmegaK;
             double Hd = H *g_inputParam[ALPHA]/(g_inputParam[ALPHA]+Stokes);
 
             double geom_factor = erf(sqrt((POW2(r_accretion)-POW2(distance))/(2*Hd)));
 
-            double t_accretion = 0.1+(1e-3/Stokes);
+            double t_accretion = g_inputParam[DUST_ACCRETION_TIMESCALE]+(1e-3/Stokes);
             double time_factor = 1. - exp(-g_dt/t_accretion);
 
             double Prob_accretion = geom_factor * time_factor;
             double X = (double)rand() / RAND_MAX;
 
-            if ((X<Prob_accretion)){
+            if (X<Prob_accretion){
 
               Particles_Destroy (curr,d);
               //printf("|  particles deleted from hill radius\n ");
@@ -258,7 +280,7 @@ void Particles_Boundary(Data *d, Grid *grid)
             // //for consistency keep this part the same as the correspondent in analysis() in "init.c"
             // if (g_inputParam[DUST_SMOOTHING_FACTOR] == -2){
             //   //Hill radius
-            //   rs=0.6*r_hill;
+            //   rs=r_hill;
             // }
 
             // if (g_inputParam[DUST_SMOOTHING_FACTOR] > 0){
