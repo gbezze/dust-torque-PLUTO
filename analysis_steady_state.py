@@ -240,9 +240,18 @@ def plot_stokes(step,cmap):
     M_star= 1 * MSUN
     t_sim = 1 * YEAR
 
-    delta_r= 1 * AU
+    delta_r= 5 * AU
     
     G = 6.6743e-11 # in kms units
+
+    def knudsen(size,radius):
+        #all in kms
+        H = 0.05 * (radius)
+        rho = 1e3 * (radius/AU)**-0.5 / (np.pi*np.sqrt(2)*H)
+        sigmac = 2e-19
+        m_mean = 3.9e-28
+        mfp = m_mean / (sigmac *rho)
+        return mfp / (2*size)
 
     x, y, size_part, size_bins, time, x_planet, y_planet, t_planet, tau_part = positions (step)
     r=np.sqrt(x**2+y**2) * AU
@@ -255,13 +264,33 @@ def plot_stokes(step,cmap):
 
     r_filter = (r>rp-delta_r) & (r<rp+delta_r)
 
-    for i in range(len(size_bins)):
+    colors = ["navy", "#A8A072", "firebrick"]
+    custom_cmap = mcolors.LinearSegmentedColormap.from_list("loggradient", colors, N=256)
 
-        size_filter = (size_part == size_bins[i])
+    rmax = np.max(r)/AU
+
+    for i in range(5):
+
+        size_filter = (size_part == size_bins[2*(i+1)-1])
+        formatted_size = f"{size_part[size_filter][0]*AU*100:.2f}"
         stokes_filtered = stokes_part[r_filter & size_filter]
         radius_filtered = r[r_filter & size_filter]/AU
-        plt.scatter(stokes_filtered, radius_filtered, s=1,label=f'size {size_bins[i]:.3f} cm', alpha=0.5, c=cmap(i/len(size_bins)))
+        knudsen_filtered = knudsen(size_part[r_filter & size_filter]*AU,radius_filtered*AU)
+        plt.scatter(stokes_filtered[::1], radius_filtered[::1], s=1, c=np.log10(knudsen_filtered[::1]), cmap=custom_cmap, vmin=-1, vmax=1)
+        plt.text(stokes_filtered[np.argmax(radius_filtered)],rmax+0.04, formatted_size, fontsize=10,rotation=0,horizontalalignment='center')
 
+    middlestokes= 2e-2
+
+    plt.annotate('', xy=(middlestokes*0.1, rmax+0.45), xytext=(middlestokes*10, rmax+0.45),
+                arrowprops=dict(arrowstyle='<-', lw=0.7, color='black'))
+    plt.text(middlestokes, rmax+0.6, 'Particle size $s$ [cm]', ha='center', fontsize=10)
+    plt.text(middlestokes, rmax+1.2, '$\Sigma_0=300$ g/cm$^2$', ha='center', fontsize=14)
+
+    cbar = plt.colorbar(label=r'Knudsen nuber $\mathcal{K}$',extend='both',shrink=0.7)
+    cbar.set_ticks([-1, np.log10(0.2), np.log10(0.5), 0,np.log10(2),np.log10(5), 1])
+    cbar.set_ticklabels(['0.1','0.2','0.5','1','2','5','10'])
+    plt.ylim(top=rmax+1.)
+    
 def get_stokes(step):
 
     AU = 1.496e11 # Astronomical unit in meters
@@ -272,7 +301,7 @@ def get_stokes(step):
     M_star= 1 * MSUN
     t_sim = 1 * YEAR
 
-    delta_r= 0.01 * AU
+    delta_r= 0.02 * AU
     
     G = 6.6743e-11 # in kms units
 
@@ -367,7 +396,7 @@ time, force, counts, N_bins, bin_sizes = read_force()
 exps = np.zeros(N_bins)
 errs = np.zeros(N_bins)
 for i in range(N_bins):
-    exps[i], errs[i] = radial_distribution(i,17,20,plotting=False)
+    exps[i], errs[i] = radial_distribution(i,,20,plotting=False)
 
 def dust_radial_exponent(x,x0,a,b,n):
     #for model fitting
@@ -398,6 +427,60 @@ print(" b  =  "+str(popt[2]*popt[3]))
 
 #old version: s0=1.99 K=1.162 a=1.012 b=-0.258
 
+# %% q exponent v2
+
+output_dir = r'./problem/out_stat_sigma300/'
+
+P=ReadPartData(1)
+
+AU = 1.496e11 # Astronomical unit in meters
+
+u=np.array(P['vx1']).flatten()
+r=np.array(P['x1']).flatten()
+
+size_part = np.array(P['radius']).flatten()
+
+truncate = lambda x, n: np.where(x==0, 0, np.trunc(x/10**(np.floor(np.log10(np.abs(x)))-n+1))*10**(np.floor(np.log10(np.abs(x)))-n+1))
+size_part = truncate(size_part,7)*AU*100
+size_bins = np.sort(np.unique(size_part))   
+
+exp_vel_fitted = np.zeros(len(size_bins))
+
+rmax = 1.3
+rmin = 0.8
+
+plt.figure()
+plt.scatter(r[(r>rmin) & (r<rmax)], -u[(r>rmin) & (r<rmax)], s=1)
+plt.xscale('log')
+plt.yscale('log')
+
+for size in size_bins:
+    
+    filter = (size_part == size) & (r>rmin) & (r<rmax)
+    r_filtered = r[filter]
+    u_filtered = -u[filter]
+
+    log_u = np.log10(u_filtered)
+    log_r = np.log10(r_filtered)
+
+    # if size == size_bins[0]:
+    #     plt.figure()
+    #     plt.scatter(log_r, log_u)
+    coeffs = np.polyfit(log_r, log_u, 1)
+    exp_vel_fitted[size_bins==size] = coeffs[0]
+
+q_fitted=-(exp_vel_fitted+1)
+
+plt.figure()
+plt.plot(size_bins,q_fitted)
+plt.xscale('log')
+
+
+
+
+
+
+
 # %% q exponent law plot
 
 plt.figure(figsize=(7,4))
@@ -415,10 +498,11 @@ plt.grid(which='both')
 
 # %% particle counts
 
-output_dir = r'./problem/out_stat'
+output_dir = r'./problem/out/'
 
 time, force, counts, N_bins, bin_sizes = read_force()
 
+P=ReadPartData(1)
 
 cmap=nice_plots()
 
@@ -440,24 +524,35 @@ plt.legend(fontsize=12,title='particle size $s$ [cm]',ncols=5, bbox_to_anchor=(0
 
 output_dir = r'./problem/out_stat/'
 
+P=ReadPartData(2)
+
 cmap=nice_plots()
 
 size, stokes, stokes_err = get_stokes(2)
 
-plt.figure()
-plt.plot(size,stokes)
+stokes_eps = stokes[0] / size[0] * size
+
+
+
+plt.figure(figsize=(7,4))
+plt.plot(size,stokes_eps,color='forestgreen',linestyle='--',label=r'$s \ \propto \ \tau \ \propto \ \mathcal{S}$')
+plt.plot(size,stokes,color= 'firebrick',label = r'simulation $\mathcal{S}$')
 plt.grid(which='both')
 plt.xscale('log')
 plt.yscale('log')
-plt.xlabel('Particle size [cm]')
-plt.ylabel(r'Stokes number $\mathcal{S}$')
+plt.xlabel('Particle size $s$ [cm]')
+plt.ylabel(r'Stokes number $\mathcal{S}$ at 1 AU')
+plt.legend()
+plt.xlim(0.05,20)
+plt.savefig('output_plots/stokes-size.pdf',bbox_inches='tight')
 
-plt.figure()
-plot_stokes(2,cmap)
-plt.xscale('log')
-plt.grid(which='both')
-plt.xlabel(r'Stokes number $\mathcal{S}$')
-plt.ylabel('Radial position [AU]')
+
+# plt.figure(figsize=(6,4))
+# plot_stokes(2,'dark2')
+# plt.xscale('log')
+# plt.grid(which='both')
+# plt.xlabel(r'Stokes number $\mathcal{S}$')
+# plt.ylabel('Radius $r$ [AU]')
 
 # %% Deletion probability
 
@@ -526,7 +621,7 @@ plt.text(0.24,0.017*1.07,r'$M_p/M_\star$',color='midnightblue')
 
 plt.yscale('log')
 plt.xscale('log')
-plt.xlim(0.2,20)
+plt.xlim(0.5,20)
 plt.grid(which='both')
 plt.xlabel('particle size $s$ [cm]')
 plt.ylabel('smoothing radius $r_s$ [AU]')

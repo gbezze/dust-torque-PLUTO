@@ -113,8 +113,6 @@ void Analysis (const Data *d, Grid *grid)
   bool size_cond, radius_cond;
   double r_part, r_hill, phi_part, r_planet, phi_planet, dx, dy, dr2, ds2, distance, orbital_direction;
 
-  double AUtom = CONST_au / 100.;
-
   double r_in = grid->xbeg_glob[IDIR]*g_inputParam[DAMPING_INNER];
   double r_out = grid->xend_glob[IDIR]*g_inputParam[DAMPING_OUTER];
   
@@ -141,10 +139,19 @@ void Analysis (const Data *d, Grid *grid)
   }
   
   //planet polar coordinates
-  // phi_planet = atan2(g_nb.y[1],g_nb.x[1]);
-  // r_planet = sqrt(g_nb.x[1]*g_nb.x[1]+g_nb.y[1]*g_nb.y[1]);
+
+  /*
+  PLUTO calculates things in this sequence:
+  calculate dust acceleration -> step dust -> step planet -> calculate dust torque
+  so we need to consider the planet where it was 1 step ago
+  This is done by using g_inputParam[X/Y_PLANET] (position gets saved there every time
+  the force on dust is calculated) instead of the standard g_nb.x/y[1]
+  */
+
   phi_planet = atan2(g_inputParam[Y_PLANET],g_inputParam[X_PLANET]);
   r_planet = sqrt(POW2(g_inputParam[Y_PLANET])+POW2(g_inputParam[X_PLANET]));  
+
+  //Hill radius
   r_hill=r_planet*pow(g_nb.m[1]/(3*g_nb.m[0]),1./3.);
 
   //check orbital direction
@@ -170,15 +177,6 @@ void Analysis (const Data *d, Grid *grid)
   //printf("DUST SMOOTHING FACTOR: %e\n",g_inputParam[DUST_SMOOTHING_FACTOR]);
 
   //dust scale height smoothing is inside particles loop
-
-  ////PLUTO calculates things in this sequence:
-  //// calculate dust acceleration -> step dust -> step planet -> calculate dust torque
-  ////so we need to consider the planet where it was 1 step ago
-
-  // double OmegaK = sqrt(G_MU/r_planet)/r_planet;
-  // double dphi = g_dt * OmegaK ; // angle spanned in one timestep (divided by 2 for integration scheme?)
-
-  // phi_planet = phi_planet + dphi;
 
   //loop on particles
   PARTICLES_LOOP(CurNode, d->PHead){
