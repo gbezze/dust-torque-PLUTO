@@ -753,7 +753,7 @@ def stokes_ticks(ax):
 nice_plots()
 
 # %% dust scatter plot
-output_dir = r'./problem/out_D3/'
+output_dir = r'./problem/out_D9/'
 
 get_sym_data()
 filenum=2
@@ -763,7 +763,7 @@ plt.figure(figsize=(4,4))
 #plt.savefig('output_plots/dust.pdf',bbox_inches='tight')
 
 dust_densplot(filenum,2,zoomangle=1.,zoomr=6,maxcounts=40)
-#plt.savefig('output_plots/dust.pdf',bbox_inches='tight')
+plt.savefig('output_plots/density_M3_s3.pdf',bbox_inches='tight')
 
 # dr_corot = 1.05*np.sqrt(M_ratio/0.05)
 # plt.axhline(y=1-dr_corot, color = 'darkgreen', linestyle = '--')
@@ -868,17 +868,17 @@ plt.ylabel('time-average of\n'+r'normalized torque $\left\langle \tilde{\xi}  \r
 
 # %% Dust torque plot
 
-fig,ax=plt.subplots(1,1,figsize=(6,3))
+fig,ax=plt.subplots(1,1,figsize=(7,4))
 plt.axhline(y=0, color='k', linewidth=0.5)
 
-output_dir = r'./problem/out_C9/'
+output_dir = r'./problem/out_C9_ex05/'
 
 time, torque_normalized, counts, N_bins, bins = read_force()
 
-plot_sym_torque(Color="steelblue",Label='simulation')
+plot_sym_torque(Color="goldenrod",Label='$0.5 \ r_H$ exclusion')
 
-# output_dir = r'./problem/out_C0.30_nd/'
-# plot_sym_torque(Color="goldenrod",Label='$r_s=H_d$')
+output_dir = r'./problem/out_C9/'
+plot_sym_torque(Color="steelblue",Label='$1 \ r_H$ exclusion')
 #stokes_ticks(ax)
 mass_string = f'{M_ratio[0]/3.333e-6:.2f}'
 plt.text(0.5, 0.02, f'$M_p ='+mass_string+'$ M$_\oplus$', ha='center', va='bottom',transform=ax.transAxes,)
@@ -886,12 +886,12 @@ plt.text(0.5, 0.02, f'$M_p ='+mass_string+'$ M$_\oplus$', ha='center', va='botto
 plt.xscale('log')
 plt.axhline(y=0, color='k', linewidth=0.7)
 plt.grid(which='both')
-#plt.xlabel('particle size $s$ [cm]')
-#plt.ylabel(r'Dust torque $\Gamma_d/\Gamma_\ast$ ($\epsilon = 0.01$)')
+plt.xlabel('particle size $s$ [cm]')
+plt.ylabel(r'Dust torque $\Gamma_d/\Gamma_\ast$ ($\epsilon = 0.01$)')
 plt.xlim(bins[0]*0.9,bins[-1]*1.1)
 ax.set_yscale('symlog', linthresh=2)
-ax.set_yticks([-1,-0.5,0,0.5,1,1.5,2,5,10,20,50])
-ax.set_yticklabels(['-1','-0.5','0','0.5','1','1.5','2','5','10','20','50'])
+ax.set_yticks([-1,-0.5,0,0.5,1,1.5,2,5,10,20,50,100,200])
+ax.set_yticklabels(['-1','-0.5','0','0.5','1','1.5','2','5','10','20','50','100','200'])
 minortickpos=[2,3,4,6,7,8,9,30,40]
 # ax.set_yticks(minortickpos, minor=True)
 # ax.set_yticks([-1,0,1,2,3,4,5,6,7,8,9,10,20,30,40,50])
@@ -902,7 +902,7 @@ plt.axhline(y=-torque_g/torque_0(), color='firebrick', linestyle='-.',label=r'$\
 ax.set_ylim(bottom=-1)
 #plt.legend(loc='upper left')
 
-plt.savefig('output_plots/torque_Hd/torque'+mass_string+'.pdf',bbox_inches='tight')
+plt.savefig('output_plots/torque_exc/torque'+mass_string+'.pdf',bbox_inches='tight')
 # %% save data
 folders=['out_C0.30',
          'out_C0.45',
